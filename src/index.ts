@@ -4,13 +4,15 @@ const dataTypeSchema = z.union([z.number().nullable(), z.date()])
 const objectTypeSchema = z.record(dataTypeSchema)
 const mySchema = z.array(objectTypeSchema)
 const objectArrayTypeSchema = z.record(z.array(dataTypeSchema))
-const objectArrayTypeIncludeDateSchema = z.object({DATE: z.array(z.date())}).and(objectArrayTypeSchema)
+const objectArrayTypeIncludeDateSchema = z.object({ DATE: z.array(z.date()) }).and(objectArrayTypeSchema)
+const dateArraySchema = z.array(z.date())
 
 type schemaArrayObjectType = z.infer<typeof mySchema>
 type schemaObjectType = z.infer<typeof objectTypeSchema>
 type schemaDataType = z.infer<typeof dataTypeSchema>
 type ObjectArrayType = z.infer<typeof objectArrayTypeSchema>
 type ObjectArrayTypeIncludingDate = z.infer<typeof objectArrayTypeIncludeDateSchema>
+type DateArrayType = z.infer<typeof dateArraySchema>
 
 // const mySchema = z.array(z.record(z.union([z.number().nullable(), z.date()])))
 
@@ -28,7 +30,11 @@ type ObjectArrayTypeIncludingDate = z.infer<typeof objectArrayTypeIncludeDateSch
 const includingDate = (
   value: ObjectArrayType | ObjectArrayTypeIncludingDate
 ): value is ObjectArrayTypeIncludingDate => {
-  return (value as ObjectArrayTypeIncludingDate).DATE !== undefined
+  if ((value as ObjectArrayTypeIncludingDate).DATE !== undefined) {
+    const result = dateArraySchema.safeParse(value.DATE)
+    return result.success
+  }
+  return false
 }
 
 const data = [
