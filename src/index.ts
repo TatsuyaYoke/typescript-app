@@ -1,17 +1,29 @@
 import * as z from 'zod'
 
-const mySchema = z.array(z.record(z.union([z.number().nullable(), z.date()])))
+const dataTypeSchema = z.union([z.number().nullable(), z.date()])
+const objectTypeSchema = z.record(dataTypeSchema)
+const mySchema = z.array(objectTypeSchema)
+const objectArrayTypeSchema = z.record(z.array(dataTypeSchema))
+const objectArrayTypeIncludeDateSchema = z.object({DATE: z.array(z.date())}).and(objectArrayTypeSchema)
 
 type schemaArrayObjectType = z.infer<typeof mySchema>
-type schemaObjectType = schemaArrayObjectType[number]
-type schemaDataType = schemaObjectType[keyof schemaObjectType]
-type ObjectArrayType = {
-  [key: string]: schemaDataType[]
-}
-type ObjectArrayTypeIncludingDate = {
-  DATE: Date[]
-  [key: string]: schemaDataType[]
-}
+type schemaObjectType = z.infer<typeof objectTypeSchema>
+type schemaDataType = z.infer<typeof dataTypeSchema>
+type ObjectArrayType = z.infer<typeof objectArrayTypeSchema>
+type ObjectArrayTypeIncludingDate = z.infer<typeof objectArrayTypeIncludeDateSchema>
+
+// const mySchema = z.array(z.record(z.union([z.number().nullable(), z.date()])))
+
+// type schemaArrayObjectType = z.infer<typeof mySchema>
+// type schemaObjectType = schemaArrayObjectType[number]
+// type schemaDataType = schemaObjectType[keyof schemaObjectType]
+// type ObjectArrayType = {
+//   [key: string]: schemaDataType[]
+// }
+// type ObjectArrayTypeIncludingDate = {
+//   DATE: Date[]
+//   [key: string]: schemaDataType[]
+// }
 
 const includingDate = (
   value: ObjectArrayType | ObjectArrayTypeIncludingDate
