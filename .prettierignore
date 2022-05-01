@@ -1,0 +1,8 @@
+package.json
+package-lock.json
+main/
+node_moduels/
+dist/
+out/
+.vscode/
+*.md
