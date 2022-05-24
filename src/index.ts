@@ -1,11 +1,8 @@
-// import sqlite3 from 'sqlite3'
-// const query = "select distinct DATE, PCDU_BAT_VOLTAGE, PCDU_BAT_CURRENT from DSX0201_tlm_id_1 where DATE between '2022-04-18' and '2022-04-19'"
-
 import * as z from 'zod'
 import { BigQuery } from '@google-cloud/bigquery'
-const bigquery = new BigQuery({
-  keyFilename: 'G:/共有ドライブ/0705_Sat_Dev_Tlm/settings/strix-tlm-bq-reader-service-account.json',
-})
+
+const BIGQUERY_PROJECT = 'syns-sol-grdsys-external-prod'
+const OBCTIME_INITIAL = '2016-1-1 00:00:00 UTC'
 
 const getStringFromUTCDateFixedTime = (date: Date, time: string) => {
   const year = date.getUTCFullYear().toString()
@@ -13,6 +10,16 @@ const getStringFromUTCDateFixedTime = (date: Date, time: string) => {
   const day = ('0' + date.getUTCDate()).slice(-2)
   return `${year}-${month}-${day} ${time}`
 }
+
+const queryTrim = (query: string) =>
+  query
+    .split('\n')
+    .map((s) => s.trim())
+    .join('\n')
+    .replace(/(^\n)|(\n$)/g, '')
+    .replace(/^\n/gm, '')
+    .replace(/\(tab\)/g, '  ')
+    .replace(/,$/, '')
 
 const request = {
   project: 'DSX0201',
@@ -31,54 +38,70 @@ const request = {
   ],
 }
 
-const queries = request.tlm.map((element) => {
-  const datasetTableQuery = `\n\t\`syns-sol-grdsys-external-prod.${request.bigqueryTable}.tlm_id_${element.tlmId}\``
-  const tlmListQuery = element.tlmList.reduce((prev, current) => `${prev}\n\t${current},`, '\n\tOBCTimeUTC,')
-  const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
-  const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
-  const dateQuery = `
-    \tXR1ReceivedUTC > \'${startDateStr}\'
-    \tAND CalibratedOBCTimeUTC > \'2016-1-1 00:00:00 UTC\'
-    \tAND OBCTimeUTC > \'${startDateStr}\'
-    \tAND OBCTimeUTC < \'${endDateStr}\'
-    \tAND OBCTime != 0
-    ${request.isStored ? '\tAND Stored = True' : ''}
+const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
+const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
+
+const querSingleTableList = request.tlm.map((currentElement) => {
+  const datasetTableQuery = `\n(tab)\`${BIGQUERY_PROJECT}.${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
+  const tlmListQuery = currentElement.tlmList.reduce(
+    (prev, current) => `${prev}\n(tab)${current},`,
     `
-  const query = `
+    (tab)OBCTimeUTC,
+    (tab)CalibratedOBCTimeUTC,
+    `
+  )
+  const whereQuery = `
+      (tab)CalibratedOBCTimeUTC > \'${OBCTIME_INITIAL}\'
+      (tab)AND OBCTimeUTC BETWEEN \'${startDateStr}\' AND \'${endDateStr}\'
+      ${request.isStored ? '(tab)AND Stored = True' : ''}
+      `
+
+  const query = queryTrim(`
     SELECT DISTINCT${tlmListQuery}
     FROM${datasetTableQuery}
-    WHERE${dateQuery}
-    `
+    WHERE${whereQuery}
+    ORDER BY OBCTimeUTC
+  `)
+
   return {
-    tlmId: element.tlmId,
+    tlmId: currentElement.tlmId,
     query: query,
   }
 })
 
+const bigquery = new BigQuery({
+  keyFilename: 'G:/共有ドライブ/0705_Sat_Dev_Tlm/settings/strix-tlm-bq-reader-service-account.json',
+})
+
+const bigqueryErrorSchema = z.object({
+  reason: z.string(),
+  location: z.string(),
+  message: z.string(),
+})
+
+console.time('test')
 Promise.all(
-  queries.map((element) => {
+  querSingleTableList.map((element) => {
     return bigquery
       .query(element.query)
       .then((data) => {
         return {
+          succuss: true,
           tlmId: element.tlmId,
           data: data[0],
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        const errorParseResult = bigqueryErrorSchema.safeParse(err.errors[0])
         return {
+          success: false,
           tlmId: element.tlmId,
-          data: null,
+          error: errorParseResult.success ? errorParseResult.data : 'Cannot parse error message',
         }
       })
   })
 ).then((response) => {
-  const data = response[0]?.data
-  const mySchema = z.object({ value: z.string() })
-  if (data) {
-    console.log(data[0].OBCTimeUTC)
-    const result = mySchema.safeParse(data[0].OBCTimeUTC)
-    console.log(result)
-    if (result.success) console.log(result.data)
-  }
+  const res = response[1]
+  console.log(res)
+  console.timeEnd('test')
 })
