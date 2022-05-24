@@ -34,8 +34,37 @@ const request = {
   tesCase: [{ value: '510_FlatSat', label: '510_FlatSat' }],
   tlm: [
     { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
-    { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_0'] },
+    { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
   ],
+}
+
+const includeObcTime = (
+  value: BigQueryObjectArrayDataType | BigQueryObjectArrayDataIncludingObcTimeType
+): value is BigQueryObjectArrayDataIncludingObcTimeType => {
+  if ((value as BigQueryObjectArrayDataIncludingObcTimeType).OBCTimeUTC !== undefined) {
+    const result = bigqueryObcTimeArrayTypeSchema.safeParse(value.OBCTimeUTC)
+    return result.success
+  }
+  return false
+}
+
+export const toObjectArrayBigQuery = (
+  records: BigQueryArrayObjectDataType
+): BigQueryObjectArrayDataIncludingObcTimeType | null => {
+  const objectArray: BigQueryObjectArrayDataType = {}
+  const keys = Object.keys(records[0] ?? {})
+  keys.forEach((key) => {
+    objectArray[key] = []
+  })
+  records.forEach((record) => {
+    keys.forEach((key) => {
+      objectArray[key]?.push(record[key] ?? null)
+    })
+  })
+  if (includeObcTime(objectArray)) {
+    return objectArray
+  }
+  return null
 }
 
 const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
@@ -73,57 +102,77 @@ const bigquery = new BigQuery({
   keyFilename: 'G:/共有ドライブ/0705_Sat_Dev_Tlm/settings/strix-tlm-bq-reader-service-account.json',
 })
 
-type apiSuccess<T> = { success: true; tlmId: number; data: T }
-type apiError = { success: false; tlmId: number; error: string }
-type apiReturnType<T> = apiSuccess<T> | apiError
-const regexBigQueryDateTime =
-  /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9].[0-9]{3}Z/
-const bigqueryDateType = z.object({ value: z.string().regex(regexBigQueryDateTime) })
-const bigqueryDataTypeSchema = z.union([z.number().nullable(), z.string(), bigqueryDateType])
-const bigqueryObjectDataTypeSchema = z.record(bigqueryDataTypeSchema)
-const bigqueryObjectArrayDataTypeSchema = z.array(bigqueryObjectDataTypeSchema)
-type BigQueryObjectArrayDataType = z.infer<typeof bigqueryObjectArrayDataTypeSchema>
+export type apiSuccess<T> = { success: true; tlmId: number; data: T }
+export type apiError = { success: false; tlmId: number; error: string }
+export type apiReturnType<T> = apiSuccess<T> | apiError
 
-const bigqueryErrorSchema = z.object({
-  reason: z.string(),
-  location: z.string(),
-  message: z.string(),
-})
+const regexBigQueryObcTime =
+  /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9].[0-9]{3}Z/
+export const bigqueryObcTimeTypeSchema = z.string().regex(regexBigQueryObcTime)
+export const bigqueryObcTimeArrayTypeSchema = z.array(bigqueryObcTimeTypeSchema)
+export const bigqueryDateTypeSchema = z.object({ value: bigqueryObcTimeTypeSchema }).transform((e) => e.value)
+export const bigqueryDataTypeSchema = z.union([z.number().nullable(), z.string(), bigqueryDateTypeSchema])
+export const bigqueryObjectDataTypeSchema = z.record(bigqueryDataTypeSchema)
+export const bigqueryArrayObjectDataTypeSchema = z.array(bigqueryObjectDataTypeSchema)
+export const bigqueryObjectArrayDataTypeSchema = z.record(z.array(bigqueryDataTypeSchema))
+export const bigqueryObjectArrayDataIncludingObcTimeTypeSchema = z
+  .object({
+    OBCTimeUTC: z.array(bigqueryObcTimeTypeSchema),
+    CalibratedOBCTimeUTC: z.array(bigqueryObcTimeTypeSchema),
+  })
+  .and(bigqueryObjectArrayDataTypeSchema)
+
+export type BigQueryArrayObjectDataType = z.infer<typeof bigqueryArrayObjectDataTypeSchema>
+export type BigQueryObjectArrayDataType = z.infer<typeof bigqueryObjectArrayDataTypeSchema>
+export type BigQueryObjectArrayDataIncludingObcTimeType = z.infer<
+  typeof bigqueryObjectArrayDataIncludingObcTimeTypeSchema
+>
 
 console.time('test')
 Promise.all(
-  querSingleTableList.map((element): Promise<apiReturnType<BigQueryObjectArrayDataType>> => {
+  querSingleTableList.map((element): Promise<apiReturnType<BigQueryObjectArrayDataIncludingObcTimeType>> => {
     return bigquery
       .query(element.query)
       .then((data) => {
-        console.log(data[0])
-        const schemaResult = bigqueryObjectArrayDataTypeSchema.safeParse(data[0])
-        if (schemaResult.success)
-          return {
-            success: true,
-            tlmId: element.tlmId,
-            data: schemaResult.data,
-          } as const
+        const schemaResult = bigqueryArrayObjectDataTypeSchema.safeParse(data[0])
+        if (schemaResult.success) {
+          const convertedData = toObjectArrayBigQuery(schemaResult.data)
+          if (convertedData)
+            return {
+              success: true,
+              tlmId: element.tlmId,
+              data: convertedData,
+            } as const
 
+          return {
+            success: false,
+            tlmId: element.tlmId,
+            error: 'Cannot convert from arrayObject to objectArray',
+          } as const
+        }
+
+        JSON.stringify(schemaResult.error.issues[0])
         return {
           success: false,
           tlmId: element.tlmId,
-          error: schemaResult.error.message,
+          error: JSON.stringify(schemaResult.error.issues[0]),
         } as const
       })
       .catch((err) => {
-        const errorParseResult = bigqueryErrorSchema.safeParse(err.errors[0])
         return {
           success: false,
           tlmId: element.tlmId,
-          error: errorParseResult.success ? errorParseResult.data.message : 'Cannot parse error message',
+          error: JSON.stringify(err.errors[0]),
         }
       })
   })
-).then((response) => {
-  const res = response[0]
-  if (res && res.success) {
-    console.log(res.data)
-  }
+).then((responses) => {
+  responses.forEach((response) => {
+    if (response.success) {
+      console.log(response.data)
+    } else {
+      console.log(response.error)
+    }
+  })
   console.timeEnd('test')
 })
