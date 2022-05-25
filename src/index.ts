@@ -70,7 +70,7 @@ export const toObjectArrayBigQuery = (
 const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
 const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
 
-const querSingleTableList = request.tlm.map((currentElement) => {
+const querySingleTableList = request.tlm.map((currentElement) => {
   const datasetTableQuery = `\n(tab)\`${BIGQUERY_PROJECT}.${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
   const tlmListQuery = currentElement.tlmList.reduce(
     (prev, current) => `${prev}\n(tab)${current},`,
@@ -111,7 +111,7 @@ const regexBigQueryObcTime =
 export const bigqueryObcTimeTypeSchema = z.string().regex(regexBigQueryObcTime)
 export const bigqueryObcTimeArrayTypeSchema = z.array(bigqueryObcTimeTypeSchema)
 export const bigqueryDateTypeSchema = z.object({ value: bigqueryObcTimeTypeSchema }).transform((e) => e.value)
-export const bigqueryDataTypeSchema = z.union([z.number().nullable(), z.string(), bigqueryDateTypeSchema])
+export const bigqueryDataTypeSchema = z.union([z.number().nullable(), bigqueryDateTypeSchema])
 export const bigqueryObjectDataTypeSchema = z.record(bigqueryDataTypeSchema)
 export const bigqueryArrayObjectDataTypeSchema = z.array(bigqueryObjectDataTypeSchema)
 export const bigqueryObjectArrayDataTypeSchema = z.record(z.array(bigqueryDataTypeSchema))
@@ -122,15 +122,23 @@ export const bigqueryObjectArrayDataIncludingObcTimeTypeSchema = z
   })
   .and(bigqueryObjectArrayDataTypeSchema)
 
+export type BigQueryObcTimeArrayType = z.infer<typeof bigqueryObcTimeArrayTypeSchema>
+export type BigQueryDataType = z.infer<typeof bigqueryDataTypeSchema>
 export type BigQueryArrayObjectDataType = z.infer<typeof bigqueryArrayObjectDataTypeSchema>
 export type BigQueryObjectArrayDataType = z.infer<typeof bigqueryObjectArrayDataTypeSchema>
 export type BigQueryObjectArrayDataIncludingObcTimeType = z.infer<
   typeof bigqueryObjectArrayDataIncludingObcTimeTypeSchema
 >
+export type responseDataType = {
+  [key: string]: {
+    time: BigQueryObcTimeArrayType
+    data: BigQueryDataType[]
+  }
+}
 
 console.time('test')
 Promise.all(
-  querSingleTableList.map((element): Promise<apiReturnType<BigQueryObjectArrayDataIncludingObcTimeType>> => {
+  querySingleTableList.map((element): Promise<apiReturnType<BigQueryObjectArrayDataIncludingObcTimeType>> => {
     return bigquery
       .query(element.query)
       .then((data) => {
@@ -167,12 +175,18 @@ Promise.all(
       })
   })
 ).then((responses) => {
+  const responseData: responseDataType = {}
   responses.forEach((response) => {
-    if (response.success) {
-      console.log(response.data)
-    } else {
-      console.log(response.error)
+    const tlmIdIndex = request.tlm.findIndex((e) => e.tlmId === response.tlmId)
+    const tlmList = request.tlm[tlmIdIndex]?.tlmList
+    if (response.success && tlmList) {
+      tlmList.forEach((tlm) => {
+        const data = response.data[tlm]
+        if (data) responseData[tlm] = { time: response.data.OBCTimeUTC, data: data }
+      })
     }
   })
+
+  console.log(responseData)
   console.timeEnd('test')
 })
