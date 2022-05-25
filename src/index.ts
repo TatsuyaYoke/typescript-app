@@ -102,9 +102,9 @@ const bigquery = new BigQuery({
   keyFilename: 'G:/共有ドライブ/0705_Sat_Dev_Tlm/settings/strix-tlm-bq-reader-service-account.json',
 })
 
-export type apiSuccess<T> = { success: true; tlmId: number; data: T }
-export type apiError = { success: false; tlmId: number; error: string }
-export type apiReturnType<T> = apiSuccess<T> | apiError
+export type querySuccess<T> = { success: true; tlmId: number; data: T }
+export type queryError = { success: false; tlmId: number; error: string }
+export type queryReturnType<T> = querySuccess<T> | queryError
 
 const regexBigQueryObcTime =
   /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9].[0-9]{3}Z/
@@ -130,15 +130,18 @@ export type BigQueryObjectArrayDataIncludingObcTimeType = z.infer<
   typeof bigqueryObjectArrayDataIncludingObcTimeTypeSchema
 >
 export type responseDataType = {
-  [key: string]: {
-    time: BigQueryObcTimeArrayType
-    data: BigQueryDataType[]
+  tlm: {
+    [key: string]: {
+      time: BigQueryObcTimeArrayType
+      data: BigQueryDataType[]
+    }
   }
+  errorMessages: string[]
 }
 
 console.time('test')
 Promise.all(
-  querySingleTableList.map((element): Promise<apiReturnType<BigQueryObjectArrayDataIncludingObcTimeType>> => {
+  querySingleTableList.map((element): Promise<queryReturnType<BigQueryObjectArrayDataIncludingObcTimeType>> => {
     return bigquery
       .query(element.query)
       .then((data) => {
@@ -171,19 +174,22 @@ Promise.all(
           success: false,
           tlmId: element.tlmId,
           error: JSON.stringify(err.errors[0]),
-        }
+        } as const
       })
   })
 ).then((responses) => {
-  const responseData: responseDataType = {}
+  const responseData: responseDataType = { tlm: {}, errorMessages: [] }
   responses.forEach((response) => {
     const tlmIdIndex = request.tlm.findIndex((e) => e.tlmId === response.tlmId)
     const tlmList = request.tlm[tlmIdIndex]?.tlmList
     if (response.success && tlmList) {
       tlmList.forEach((tlm) => {
         const data = response.data[tlm]
-        if (data) responseData[tlm] = { time: response.data.OBCTimeUTC, data: data }
+        if (data) responseData.tlm[tlm] = { time: response.data.OBCTimeUTC, data: data }
       })
+    } else if (!response.success && tlmList) {
+      const error = response.error
+      responseData.errorMessages.push(error)
     }
   })
 
