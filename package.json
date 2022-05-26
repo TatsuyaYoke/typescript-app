@@ -8,6 +8,7 @@
     "build": "tsc",
     "dev": "ts-node-dev --respawn src/index.ts",
     "dev3": "ts-node-dev --respawn src/index3.ts",
+    "dev4": "ts-node-dev --respawn src/index4.ts",
     "dev2": "ts-node-dev src/index2.ts"
   },
   "keywords": [],

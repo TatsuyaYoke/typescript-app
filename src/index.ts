@@ -26,7 +26,7 @@ const request = {
   isOrbit: false,
   bigqueryTable: 'strix_b_telemetry_v_6_17',
   isStored: true,
-  isChoosed: false,
+  isChosen: false,
   dateSetting: {
     startDate: new Date(2022, 3, 28),
     endDate: new Date(2022, 3, 28),
@@ -39,19 +39,14 @@ const request = {
 }
 
 const includeObcTime = (
-  value: BigQueryObjectArrayDataType | BigQueryObjectArrayDataIncludingObcTimeType
-): value is BigQueryObjectArrayDataIncludingObcTimeType => {
-  if ((value as BigQueryObjectArrayDataIncludingObcTimeType).OBCTimeUTC !== undefined) {
-    const result = bigqueryObcTimeArrayTypeSchema.safeParse(value.OBCTimeUTC)
-    return result.success
-  }
+  value: OrbitObjectArrayType | OrbitObjectArrayIncludingDateTimeType
+): value is OrbitObjectArrayIncludingDateTimeType => {
+  if ((value as OrbitObjectArrayIncludingDateTimeType).OBCTimeUTC !== undefined) return true
   return false
 }
 
-export const toObjectArrayBigQuery = (
-  records: BigQueryArrayObjectDataType
-): BigQueryObjectArrayDataIncludingObcTimeType | null => {
-  const objectArray: BigQueryObjectArrayDataType = {}
+export const toObjectArrayOrbit = (records: OrbitArrayObjectType): OrbitObjectArrayIncludingDateTimeType | null => {
+  const objectArray: OrbitObjectArrayType = {}
   const keys = Object.keys(records[0] ?? {})
   keys.forEach((key) => {
     objectArray[key] = []
@@ -82,7 +77,7 @@ const querySingleTableList = request.tlm.map((currentElement) => {
   const whereQuery = `
       (tab)CalibratedOBCTimeUTC > \'${OBCTIME_INITIAL}\'
       (tab)AND OBCTimeUTC BETWEEN \'${startDateStr}\' AND \'${endDateStr}\'
-      ${request.isStored ? '(tab)AND Stored = True' : ''}
+      ${request.isStored ? '(tab)AND Stored = True' : '(tab)AND Stored = False'}
       `
 
   const query = queryTrim(`
@@ -102,38 +97,39 @@ const bigquery = new BigQuery({
   keyFilename: 'G:/共有ドライブ/0705_Sat_Dev_Tlm/settings/strix-tlm-bq-reader-service-account.json',
 })
 
-export type querySuccess<T> = { success: true; tlmId: number; data: T }
-export type queryError = { success: false; tlmId: number; error: string }
+export type querySuccess<T> = { success: true; tlmId?: number; data: T }
+export type queryError = { success: false; tlmId?: number; error: string }
 export type queryReturnType<T> = querySuccess<T> | queryError
 
-const regexBigQueryObcTime =
+const regexOrbitDateTime =
   /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9].[0-9]{3}Z/
-export const bigqueryObcTimeTypeSchema = z.string().regex(regexBigQueryObcTime)
-export const bigqueryObcTimeArrayTypeSchema = z.array(bigqueryObcTimeTypeSchema)
-export const bigqueryDateTypeSchema = z.object({ value: bigqueryObcTimeTypeSchema }).transform((e) => e.value)
-export const bigqueryDataTypeSchema = z.union([z.number().nullable(), bigqueryDateTypeSchema])
-export const bigqueryObjectDataTypeSchema = z.record(bigqueryDataTypeSchema)
-export const bigqueryArrayObjectDataTypeSchema = z.array(bigqueryObjectDataTypeSchema)
-export const bigqueryObjectArrayDataTypeSchema = z.record(z.array(bigqueryDataTypeSchema))
-export const bigqueryObjectArrayDataIncludingObcTimeTypeSchema = z
-  .object({
-    OBCTimeUTC: z.array(bigqueryObcTimeTypeSchema),
-    CalibratedOBCTimeUTC: z.array(bigqueryObcTimeTypeSchema),
-  })
-  .and(bigqueryObjectArrayDataTypeSchema)
+export const orbitDateTimeTypeSchema = z
+  .object({ value: z.string().regex(regexOrbitDateTime) })
+  .transform((e) => e.value)
 
-export type BigQueryObcTimeArrayType = z.infer<typeof bigqueryObcTimeArrayTypeSchema>
-export type BigQueryDataType = z.infer<typeof bigqueryDataTypeSchema>
-export type BigQueryArrayObjectDataType = z.infer<typeof bigqueryArrayObjectDataTypeSchema>
-export type BigQueryObjectArrayDataType = z.infer<typeof bigqueryObjectArrayDataTypeSchema>
-export type BigQueryObjectArrayDataIncludingObcTimeType = z.infer<
-  typeof bigqueryObjectArrayDataIncludingObcTimeTypeSchema
->
+export const orbitDataTypeSchema = z.union([z.number().nullable(), orbitDateTimeTypeSchema])
+export const orbitObjectTypeSchema = z.record(orbitDataTypeSchema)
+
+export const orbitArrayObjectTypeSchema = z.array(orbitObjectTypeSchema)
+export const orbitObjectArrayTypeSchema = z.record(z.array(orbitDataTypeSchema))
+export const orbitObjectArrayIncludingDateTimeTypeSchema = z
+  .object({
+    OBCTimeUTC: z.array(orbitDateTimeTypeSchema),
+    CalibratedOBCTimeUTC: z.array(orbitDateTimeTypeSchema),
+  })
+  .and(orbitObjectArrayTypeSchema)
+
+export type OrbitDateTimeType = z.infer<typeof orbitDateTimeTypeSchema>
+export type OrbitDataType = z.infer<typeof orbitDataTypeSchema>
+export type OrbitArrayObjectType = z.infer<typeof orbitArrayObjectTypeSchema>
+export type OrbitObjectArrayType = z.infer<typeof orbitObjectArrayTypeSchema>
+export type OrbitObjectArrayIncludingDateTimeType = z.infer<typeof orbitObjectArrayIncludingDateTimeTypeSchema>
+
 export type responseDataType = {
   tlm: {
     [key: string]: {
-      time: BigQueryObcTimeArrayType
-      data: BigQueryDataType[]
+      time: OrbitDateTimeType[]
+      data: OrbitDataType[]
     }
   }
   errorMessages: string[]
@@ -141,13 +137,13 @@ export type responseDataType = {
 
 console.time('test')
 Promise.all(
-  querySingleTableList.map((element): Promise<queryReturnType<BigQueryObjectArrayDataIncludingObcTimeType>> => {
+  querySingleTableList.map((element): Promise<queryReturnType<OrbitObjectArrayIncludingDateTimeType>> => {
     return bigquery
       .query(element.query)
       .then((data) => {
-        const schemaResult = bigqueryArrayObjectDataTypeSchema.safeParse(data[0])
+        const schemaResult = orbitArrayObjectTypeSchema.safeParse(data[0])
         if (schemaResult.success) {
-          const convertedData = toObjectArrayBigQuery(schemaResult.data)
+          const convertedData = toObjectArrayOrbit(schemaResult.data)
           if (convertedData)
             return {
               success: true,
