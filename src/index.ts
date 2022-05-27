@@ -31,48 +31,6 @@ export type requestDataType = {
   tlm: requestTlmType[]
 }
 
-let request: requestDataType
-const isOrbitSetting = true
-
-if (isOrbitSetting) {
-  request = {
-    project: 'DSX0201',
-    isOrbit: isOrbitSetting,
-    bigqueryTable: 'strix_b_telemetry_v_6_17',
-    isStored: true,
-    isChosen: false,
-    dateSetting: {
-      startDate: new Date(2022, 3, 28),
-      endDate: new Date(2022, 3, 28),
-    },
-    tesCase: [{ value: '510_FlatSat', label: '510_FlatSat' }],
-    tlm: [
-      { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
-      { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
-    ],
-  }
-} else {
-  request = {
-    project: 'DSX0201',
-    isOrbit: isOrbitSetting,
-    bigqueryTable: 'strix_b_telemetry_v_6_17',
-    isStored: false,
-    isChosen: true,
-    dateSetting: {
-      startDate: new Date(2022, 4, 18),
-      endDate: new Date(2022, 4, 19),
-    },
-    tesCase: [
-      { value: '510_FlatSat', label: '510_FlatSat' },
-      { value: '511_Hankan_Test', label: '511_Hankan_Test' },
-    ],
-    tlm: [
-      { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
-      { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
-    ],
-  }
-}
-
 const getStringFromUTCDateFixedTime = (date: Date, time: string) => {
   const year = date.getUTCFullYear().toString()
   const month = ('0' + (date.getUTCMonth() + 1)).slice(-2)
@@ -89,60 +47,6 @@ const queryTrim = (query: string) =>
     .replace(/^\n/gm, '')
     .replace(/\(tab\)/g, '  ')
     .replace(/,$/, '')
-
-const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
-const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
-const tlmList = request.tlm.map((e) => e.tlmList).flat()
-
-const queryObjectOrbitList = request.tlm.map((currentElement) => {
-  const datasetTableQuery = `\n(tab)\`${BIGQUERY_PROJECT}.${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
-  const tlmListQuery = currentElement.tlmList.reduce(
-    (prev, current) => `${prev}\n(tab)${current},`,
-    `
-    (tab)OBCTimeUTC,
-    (tab)CalibratedOBCTimeUTC,
-    `
-  )
-  const whereQuery = `
-      (tab)CalibratedOBCTimeUTC > \'${OBCTIME_INITIAL}\'
-      (tab)AND OBCTimeUTC BETWEEN \'${startDateStr}\' AND \'${endDateStr}\'
-      ${request.isStored ? '(tab)AND Stored = True' : '(tab)AND Stored = False'}
-      `
-
-  const query = queryTrim(`
-    SELECT DISTINCT${tlmListQuery}
-    FROM${datasetTableQuery}
-    WHERE${whereQuery}
-    ORDER BY OBCTimeUTC
-  `)
-
-  return {
-    tlmId: currentElement.tlmId,
-    query: query,
-  }
-})
-
-const queryObjectGroundList = tlmList.map((tlm) => {
-  const queryTestCase = request.tesCase
-    .reduce((prev, current) => {
-      return `${prev}test_case = \'${current.value}\' OR `
-    }, '')
-    .replace(/ OR $/, '')
-
-  return {
-    tlmName: tlm,
-    query: queryTrim(`
-    SELECT DISTINCT
-    (tab)DATE,
-    (tab)${tlm}
-    FROM tlm
-    WHERE
-    (tab)${!request.isChosen ? `DATE BETWEEN \'${startDateStr}\' AND \'${endDateStr}\'` : queryTestCase}
-    ${request.isStored ? '(tab)AND is_stored = 1' : '(tab)AND is_stored = 0'}
-    ORDER BY DATE
-  `),
-  }
-})
 
 export type querySuccess<T> = {
   orbit: { success: true; tlmId: number; data: T }
@@ -217,7 +121,7 @@ export type responseDataType = {
         data: DataType['orbit'][]
       }
     }
-    errorMessages: string[]
+    warningMessages: string[]
   }
   ground: {
     tlm: {
@@ -226,7 +130,7 @@ export type responseDataType = {
         data: DataType['ground'][]
       }
     }
-    errorMessages: string[]
+    warningMessages: string[]
   }
 }
 
@@ -369,35 +273,90 @@ const readGroundDbSync = (
     })
   })
 
-const getOrbitData = () =>
-  Promise.all(queryObjectOrbitList.map((element) => readOrbitDbSync(SETTING_PATH, element.query, element.tlmId))).then(
-    (responses) => {
-      const responseData: responseDataType['orbit'] = { tlm: {}, errorMessages: [] }
-      responses.forEach((response) => {
-        const tlmIdIndex = request.tlm.findIndex((e) => e.tlmId === response.tlmId)
-        const tlmListEachTlmId = request.tlm[tlmIdIndex]?.tlmList
-        if (response.success && tlmListEachTlmId) {
-          tlmListEachTlmId.forEach((tlm) => {
-            const data = response.data[tlm]
-            if (data) responseData.tlm[tlm] = { time: response.data.OBCTimeUTC, data: data }
-          })
-        } else if (!response.success && tlmListEachTlmId) {
-          const error = response.error
-          responseData.errorMessages.push(error)
-        }
-      })
-      return responseData
-    }
-  )
+const getOrbitData = (request: requestDataType) => {
+  const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
+  const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
+  const queryObjectList = request.tlm.map((currentElement) => {
+    const datasetTableQuery = `\n(tab)\`${BIGQUERY_PROJECT}.${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
+    const tlmListQuery = currentElement.tlmList.reduce(
+      (prev, current) => `${prev}\n(tab)${current},`,
+      `
+    (tab)OBCTimeUTC,
+    (tab)CalibratedOBCTimeUTC,
+    `
+    )
+    const whereQuery = `
+      (tab)CalibratedOBCTimeUTC > \'${OBCTIME_INITIAL}\'
+      (tab)AND OBCTimeUTC BETWEEN \'${startDateStr}\' AND \'${endDateStr}\'
+      ${request.isStored ? '(tab)AND Stored = True' : '(tab)AND Stored = False'}
+      `
 
-const getGroundData = () =>
-  Promise.all(
-    queryObjectGroundList.map(async (queryObject) => {
+    const query = queryTrim(`
+    SELECT DISTINCT${tlmListQuery}
+    FROM${datasetTableQuery}
+    WHERE${whereQuery}
+    ORDER BY OBCTimeUTC
+  `)
+
+    return {
+      tlmId: currentElement.tlmId,
+      query: query,
+    }
+  })
+
+  return Promise.all(
+    queryObjectList.map((element) => readOrbitDbSync(SETTING_PATH, element.query, element.tlmId))
+  ).then((responses) => {
+    const responseData: responseDataType['orbit'] = { tlm: {}, warningMessages: [] }
+    responses.forEach((response) => {
+      const tlmIdIndex = request.tlm.findIndex((e) => e.tlmId === response.tlmId)
+      const tlmListEachTlmId = request.tlm[tlmIdIndex]?.tlmList
+      if (response.success && tlmListEachTlmId) {
+        tlmListEachTlmId.forEach((tlm) => {
+          const data = response.data[tlm]
+          if (data) responseData.tlm[tlm] = { time: response.data.OBCTimeUTC, data: data }
+        })
+      } else if (!response.success && tlmListEachTlmId) {
+        const error = response.error
+        responseData.warningMessages.push(error)
+      }
+    })
+    return responseData
+  })
+}
+
+const getGroundData = (request: requestDataType) => {
+  const tlmList = request.tlm.map((e) => e.tlmList).flat()
+  const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
+  const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
+  const queryObjectList = tlmList.map((tlm) => {
+    const queryTestCase = request.tesCase
+      .reduce((prev, current) => {
+        return `${prev}test_case = \'${current.value}\' OR `
+      }, '')
+      .replace(/ OR $/, '')
+
+    return {
+      tlmName: tlm,
+      query: queryTrim(`
+      SELECT DISTINCT
+      (tab)DATE,
+      (tab)${tlm}
+      FROM tlm
+      WHERE
+      (tab)${!request.isChosen ? `DATE BETWEEN \'${startDateStr}\' AND \'${endDateStr}\'` : queryTestCase}
+      ${request.isStored ? '(tab)AND is_stored = 1' : '(tab)AND is_stored = 0'}
+      ORDER BY DATE
+    `),
+    }
+  })
+  return Promise.all(
+    queryObjectList.map(async (queryObject) => {
       const dbPath = join(DB_TOP_PATH, request.project, `${queryObject.tlmName}.db`)
       return await readGroundDbSync(dbPath, queryObject.query, queryObject.tlmName)
     })
   ).then((responses) => {
-    const responseData: responseDataType['ground'] = { tlm: {}, errorMessages: [] }
+    const responseData: responseDataType['ground'] = { tlm: {}, warningMessages: [] }
     responses.forEach((response) => {
       if (response.success) {
         const tlmName = response.tlmName
@@ -405,24 +364,60 @@ const getGroundData = () =>
         if (data && tlmName) responseData.tlm[tlmName] = { time: response.data.DATE, data: data }
       } else {
         const error = response.error
-        responseData.errorMessages.push(error)
+        responseData.warningMessages.push(error)
       }
     })
     return responseData
   })
+}
 
 const getData = async (isOrbit: boolean) => {
   if (isOrbit) {
-    const response = await getOrbitData()
+    const request = {
+      project: 'DSX0201',
+      isOrbit: isOrbit,
+      bigqueryTable: 'strix_b_telemetry_v_6_17',
+      isStored: true,
+      isChosen: false,
+      dateSetting: {
+        startDate: new Date(2022, 3, 28),
+        endDate: new Date(2022, 3, 28),
+      },
+      tesCase: [{ value: '510_FlatSat', label: '510_FlatSat' }],
+      tlm: [
+        { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
+        { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
+      ],
+    }
+    const response = await getOrbitData(request)
     console.log(response)
     console.timeEnd('test')
     return response
   }
-  const response = await getGroundData()
+  const request = {
+    project: 'DSX0201',
+    isOrbit: isOrbit,
+    bigqueryTable: 'strix_b_telemetry_v_6_17',
+    isStored: false,
+    isChosen: true,
+    dateSetting: {
+      startDate: new Date(2022, 4, 18),
+      endDate: new Date(2022, 4, 19),
+    },
+    tesCase: [
+      { value: '510_FlatSat', label: '510_FlatSat' },
+      { value: '511_Hankan_Test', label: '511_Hankan_Test' },
+    ],
+    tlm: [
+      { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
+      { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
+    ],
+  }
+  const response = await getGroundData(request)
   console.log(response)
   console.timeEnd('test')
   return response
 }
 
 console.time('test')
-getData(request.isOrbit)
+getData(true)
