@@ -3,6 +3,7 @@ import { BigQuery } from '@google-cloud/bigquery'
 
 const BIGQUERY_PROJECT = 'syns-sol-grdsys-external-prod'
 const OBCTIME_INITIAL = '2016-1-1 00:00:00 UTC'
+const SETTING_PATH = 'G:/共有ドライブ/0705_Sat_Dev_Tlm/settings/strix-tlm-bq-reader-service-account.json'
 
 const getStringFromUTCDateFixedTime = (date: Date, time: string) => {
   const year = date.getUTCFullYear().toString()
@@ -38,34 +39,10 @@ const request = {
   ],
 }
 
-const includeObcTime = (
-  value: OrbitObjectArrayType | OrbitObjectArrayIncludingDateTimeType
-): value is OrbitObjectArrayIncludingDateTimeType => {
-  if ((value as OrbitObjectArrayIncludingDateTimeType).OBCTimeUTC !== undefined) return true
-  return false
-}
-
-export const toObjectArrayOrbit = (records: OrbitArrayObjectType): OrbitObjectArrayIncludingDateTimeType | null => {
-  const objectArray: OrbitObjectArrayType = {}
-  const keys = Object.keys(records[0] ?? {})
-  keys.forEach((key) => {
-    objectArray[key] = []
-  })
-  records.forEach((record) => {
-    keys.forEach((key) => {
-      objectArray[key]?.push(record[key] ?? null)
-    })
-  })
-  if (includeObcTime(objectArray)) {
-    return objectArray
-  }
-  return null
-}
-
 const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
 const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
 
-const querySingleTableList = request.tlm.map((currentElement) => {
+const queryObjectOrbitList = request.tlm.map((currentElement) => {
   const datasetTableQuery = `\n(tab)\`${BIGQUERY_PROJECT}.${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
   const tlmListQuery = currentElement.tlmList.reduce(
     (prev, current) => `${prev}\n(tab)${current},`,
@@ -91,10 +68,6 @@ const querySingleTableList = request.tlm.map((currentElement) => {
     tlmId: currentElement.tlmId,
     query: query,
   }
-})
-
-const bigquery = new BigQuery({
-  keyFilename: 'G:/共有ドライブ/0705_Sat_Dev_Tlm/settings/strix-tlm-bq-reader-service-account.json',
 })
 
 export type querySuccess<T> = { success: true; tlmId?: number; data: T }
@@ -135,55 +108,91 @@ export type responseDataType = {
   errorMessages: string[]
 }
 
+const includeObcTime = (
+  value: OrbitObjectArrayType | OrbitObjectArrayIncludingDateTimeType
+): value is OrbitObjectArrayIncludingDateTimeType => {
+  if ((value as OrbitObjectArrayIncludingDateTimeType).OBCTimeUTC !== undefined) return true
+  return false
+}
+
+export const toObjectArrayOrbit = (records: OrbitArrayObjectType): OrbitObjectArrayIncludingDateTimeType | null => {
+  const objectArray: OrbitObjectArrayType = {}
+  const keys = Object.keys(records[0] ?? {})
+  keys.forEach((key) => {
+    objectArray[key] = []
+  })
+  records.forEach((record) => {
+    keys.forEach((key) => {
+      objectArray[key]?.push(record[key] ?? null)
+    })
+  })
+  if (includeObcTime(objectArray)) {
+    return objectArray
+  }
+  return null
+}
+
+const readOrbitDbSync = (
+  path: string,
+  query: string,
+  tlmId: number
+): Promise<queryReturnType<OrbitObjectArrayIncludingDateTimeType>> => {
+  const bigquery = new BigQuery({
+    keyFilename: path,
+  })
+
+  return bigquery
+    .query(query)
+    .then((data) => {
+      const schemaResult = orbitArrayObjectTypeSchema.safeParse(data[0])
+      if (schemaResult.success) {
+        const convertedData = toObjectArrayOrbit(schemaResult.data)
+        if (convertedData)
+          return {
+            success: true,
+            tlmId: tlmId,
+            data: convertedData,
+          } as const
+
+        return {
+          success: false,
+          tlmId: tlmId,
+          error: `tlmId${tlmId}: Cannot convert from arrayObject to objectArray`,
+        } as const
+      }
+
+      return {
+        success: false,
+        tlmId: tlmId,
+        error: `tlmId${tlmId}: ${JSON.stringify(schemaResult.error.issues[0])}`,
+      } as const
+    })
+    .catch((err) => {
+      return {
+        success: false,
+        tlmId: tlmId,
+        error: `tlmId${tlmId}: ${JSON.stringify(err.errors[0])}`,
+      } as const
+    })
+}
+
 console.time('test')
 Promise.all(
-  querySingleTableList.map((element): Promise<queryReturnType<OrbitObjectArrayIncludingDateTimeType>> => {
-    return bigquery
-      .query(element.query)
-      .then((data) => {
-        const schemaResult = orbitArrayObjectTypeSchema.safeParse(data[0])
-        if (schemaResult.success) {
-          const convertedData = toObjectArrayOrbit(schemaResult.data)
-          if (convertedData)
-            return {
-              success: true,
-              tlmId: element.tlmId,
-              data: convertedData,
-            } as const
-
-          return {
-            success: false,
-            tlmId: element.tlmId,
-            error: 'Cannot convert from arrayObject to objectArray',
-          } as const
-        }
-
-        JSON.stringify(schemaResult.error.issues[0])
-        return {
-          success: false,
-          tlmId: element.tlmId,
-          error: JSON.stringify(schemaResult.error.issues[0]),
-        } as const
-      })
-      .catch((err) => {
-        return {
-          success: false,
-          tlmId: element.tlmId,
-          error: JSON.stringify(err.errors[0]),
-        } as const
-      })
-  })
+  queryObjectOrbitList.map(
+    (element): Promise<queryReturnType<OrbitObjectArrayIncludingDateTimeType>> =>
+      readOrbitDbSync(SETTING_PATH, element.query, element.tlmId)
+  )
 ).then((responses) => {
   const responseData: responseDataType = { tlm: {}, errorMessages: [] }
   responses.forEach((response) => {
     const tlmIdIndex = request.tlm.findIndex((e) => e.tlmId === response.tlmId)
-    const tlmList = request.tlm[tlmIdIndex]?.tlmList
-    if (response.success && tlmList) {
-      tlmList.forEach((tlm) => {
+    const tlmListEachTlmId = request.tlm[tlmIdIndex]?.tlmList
+    if (response.success && tlmListEachTlmId) {
+      tlmListEachTlmId.forEach((tlm) => {
         const data = response.data[tlm]
         if (data) responseData.tlm[tlm] = { time: response.data.OBCTimeUTC, data: data }
       })
-    } else if (!response.success && tlmList) {
+    } else if (!response.success && tlmListEachTlmId) {
       const error = response.error
       responseData.errorMessages.push(error)
     }
