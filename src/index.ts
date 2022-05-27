@@ -3,10 +3,10 @@ import { BigQuery } from '@google-cloud/bigquery'
 import { join } from 'path'
 import sqlite3 from 'sqlite3'
 
-const DB_TOP_PATH = 'G:/共有ドライブ/0705_Sat_Dev_Tlm/db'
-const BIGQUERY_PROJECT = 'syns-sol-grdsys-external-prod'
-const OBCTIME_INITIAL = '2016-1-1 00:00:00 UTC'
-const SETTING_PATH = 'G:/共有ドライブ/0705_Sat_Dev_Tlm/settings/strix-tlm-bq-reader-service-account.json'
+const DB_TOP_PATH = process.env.DB_TOP_PATH
+const BIGQUERY_PROJECT = process.env.BIGQUERY_PROJECT
+const OBCTIME_INITIAL = process.env.OBCTIME_INITIAL
+const SETTING_PATH = process.env.SETTING_PATH
 
 export type selectOptionType = {
   label: string

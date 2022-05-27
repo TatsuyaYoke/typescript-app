@@ -4,7 +4,10 @@
  */
  declare namespace NodeJS {
     interface ProcessEnv {
-      readonly PORT?: string
+      readonly DB_TOP_PATH?: string
+      readonly BIGQUERY_PROJECT?: string
+      readonly OBCTIME_INITIAL?: string
+      readonly SETTING_PATH?: string
     }
   }
   
