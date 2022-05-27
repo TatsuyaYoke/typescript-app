@@ -32,7 +32,7 @@ export type requestDataType = {
 }
 
 let request: requestDataType
-const isOrbitSetting = false
+const isOrbitSetting = true
 
 if (isOrbitSetting) {
   request = {
@@ -144,13 +144,18 @@ const queryObjectGroundList = tlmList.map((tlm) => {
   }
 })
 
-export type querySuccess<T, IsOrbit extends boolean = false> = IsOrbit extends true
-  ? { success: true; tlmId: number; data: T }
-  : { success: true; tlmName: string; data: T }
-export type queryError<IsOrbit extends boolean = false> = IsOrbit extends true
-  ? { success: false; tlmId: number; error: string }
-  : { success: false; tlmName: string; error: string }
-export type queryReturnType<T, IsOrbit extends boolean = false> = querySuccess<T, IsOrbit> | queryError<IsOrbit>
+export type querySuccess<T> = {
+  orbit: { success: true; tlmId: number; data: T }
+  ground: { success: true; tlmName: string; data: T }
+}
+export type queryError = {
+  orbit: { success: false; tlmId: number; error: string }
+  ground: { success: false; tlmName: string; error: string }
+}
+export type queryReturnType<T> = {
+  orbit: querySuccess<T>['orbit'] | queryError['orbit']
+  ground: querySuccess<T>['ground'] | queryError['ground']
+}
 
 const regexGroundTestDateTime =
   /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]/
@@ -159,17 +164,11 @@ export const groundDateTimeTypeSchema = z.string().regex(regexGroundTestDateTime
 export const groundDataTypeSchema = z.union([z.number().nullable(), groundDateTimeTypeSchema])
 export const groundObjectTypeSchema = z.record(groundDataTypeSchema)
 
-export const groundArrayObjectSchema = z.array(groundObjectTypeSchema)
+export const groundArrayObjectTypeSchema = z.array(groundObjectTypeSchema)
 export const groundObjectArrayTypeSchema = z.record(z.array(groundDataTypeSchema))
 export const groundObjectArrayIncludingDateTimeTypeSchema = z
   .object({ DATE: z.array(z.string()) })
   .and(groundObjectArrayTypeSchema)
-
-export type GroundDateTimeType = z.infer<typeof groundDateTimeTypeSchema>
-export type GroundDataType = z.infer<typeof groundDataTypeSchema>
-export type GroundArrayObjectType = z.infer<typeof groundArrayObjectSchema>
-export type GroundObjectArrayType = z.infer<typeof groundObjectArrayTypeSchema>
-export type GroundObjectArrayIncludingDateTimeType = z.infer<typeof groundObjectArrayIncludingDateTimeTypeSchema>
 
 const regexOrbitDateTime =
   /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9].[0-9]{3}Z/
@@ -189,45 +188,57 @@ export const orbitObjectArrayIncludingDateTimeTypeSchema = z
   })
   .and(orbitObjectArrayTypeSchema)
 
-export type OrbitDateTimeType = z.infer<typeof orbitDateTimeTypeSchema>
-export type OrbitDataType = z.infer<typeof orbitDataTypeSchema>
-export type OrbitArrayObjectType = z.infer<typeof orbitArrayObjectTypeSchema>
-export type OrbitObjectArrayType = z.infer<typeof orbitObjectArrayTypeSchema>
-export type OrbitObjectArrayIncludingDateTimeType = z.infer<typeof orbitObjectArrayIncludingDateTimeTypeSchema>
-
-export type DateTimeType<IsOrbit extends boolean = false> = IsOrbit extends true
-  ? OrbitDateTimeType
-  : GroundDateTimeType
-export type DataType<IsOrbit extends boolean = false> = IsOrbit extends true ? OrbitDataType : GroundDataType
-export type ArrayObjectType<IsOrbit extends boolean = false> = IsOrbit extends true
-  ? OrbitArrayObjectType
-  : GroundArrayObjectType
-export type ObjectArrayType<IsOrbit extends boolean = false> = IsOrbit extends true
-  ? OrbitObjectArrayType
-  : GroundObjectArrayType
-export type ObjectArrayIncludingDateTimeType<IsOrbit extends boolean = false> = IsOrbit extends true
-  ? OrbitObjectArrayIncludingDateTimeType
-  : GroundObjectArrayIncludingDateTimeType
-
-export type responseDataType<IsOrbit extends boolean> = {
-  tlm: {
-    [key: string]: {
-      time: DateTimeType<IsOrbit>[]
-      data: DataType<IsOrbit>[]
-    }
-  }
-  errorMessages: string[]
+export type DateTimeType = {
+  orbit: z.infer<typeof orbitDateTimeTypeSchema>
+  ground: z.infer<typeof groundDateTimeTypeSchema>
+}
+export type DataType = {
+  orbit: z.infer<typeof orbitDataTypeSchema>
+  ground: z.infer<typeof groundDataTypeSchema>
+}
+export type ArrayObjectType = {
+  orbit: z.infer<typeof orbitArrayObjectTypeSchema>
+  ground: z.infer<typeof groundArrayObjectTypeSchema>
+}
+export type ObjectArrayType = {
+  orbit: z.infer<typeof orbitObjectArrayTypeSchema>
+  ground: z.infer<typeof groundObjectArrayTypeSchema>
+}
+export type ObjectArrayIncludingDateTimeType = {
+  orbit: z.infer<typeof orbitObjectArrayIncludingDateTimeTypeSchema>
+  ground: z.infer<typeof groundObjectArrayIncludingDateTimeTypeSchema>
 }
 
-const includeObcTime = (
-  value: OrbitObjectArrayType | OrbitObjectArrayIncludingDateTimeType
-): value is OrbitObjectArrayIncludingDateTimeType => {
-  if ((value as OrbitObjectArrayIncludingDateTimeType).OBCTimeUTC !== undefined) return true
+export type responseDataType = {
+  orbit: {
+    tlm: {
+      [key: string]: {
+        time: DateTimeType['orbit'][]
+        data: DataType['orbit'][]
+      }
+    }
+    errorMessages: string[]
+  }
+  ground: {
+    tlm: {
+      [key: string]: {
+        time: DateTimeType['ground'][]
+        data: DataType['ground'][]
+      }
+    }
+    errorMessages: string[]
+  }
+}
+
+const includeObcTime = (value: unknown): value is ObjectArrayIncludingDateTimeType['orbit'] => {
+  if ((value as ObjectArrayIncludingDateTimeType['orbit']).OBCTimeUTC !== undefined) return true
   return false
 }
 
-export const toObjectArrayOrbit = (records: OrbitArrayObjectType): OrbitObjectArrayIncludingDateTimeType | null => {
-  const objectArray: OrbitObjectArrayType = {}
+export const toObjectArrayOrbit = (
+  records: ArrayObjectType['orbit']
+): ObjectArrayIncludingDateTimeType['orbit'] | null => {
+  const objectArray: ObjectArrayType['orbit'] = {}
   const keys = Object.keys(records[0] ?? {})
   keys.forEach((key) => {
     objectArray[key] = []
@@ -243,15 +254,15 @@ export const toObjectArrayOrbit = (records: OrbitArrayObjectType): OrbitObjectAr
   return null
 }
 
-const includeDate = (
-  value: GroundObjectArrayType | GroundObjectArrayIncludingDateTimeType
-): value is GroundObjectArrayIncludingDateTimeType => {
-  if ((value as GroundObjectArrayIncludingDateTimeType).DATE !== undefined) return true
+const includeDate = (value: unknown): value is ObjectArrayIncludingDateTimeType['ground'] => {
+  if ((value as ObjectArrayIncludingDateTimeType['ground']).DATE !== undefined) return true
   return false
 }
 
-export const toObjectArrayGround = (records: GroundArrayObjectType): GroundObjectArrayIncludingDateTimeType | null => {
-  const objectArray: GroundObjectArrayType = {}
+export const toObjectArrayGround = (
+  records: ArrayObjectType['ground']
+): ObjectArrayIncludingDateTimeType['ground'] | null => {
+  const objectArray: ObjectArrayType['ground'] = {}
   const keys = Object.keys(records[0] ?? {})
   keys.forEach((key) => {
     objectArray[key] = []
@@ -271,7 +282,7 @@ const readOrbitDbSync = (
   path: string,
   query: string,
   tlmId: number
-): Promise<queryReturnType<OrbitObjectArrayIncludingDateTimeType, true>> => {
+): Promise<queryReturnType<ObjectArrayIncludingDateTimeType['orbit']>['orbit']> => {
   const bigquery = new BigQuery({
     keyFilename: path,
   })
@@ -311,11 +322,11 @@ const readOrbitDbSync = (
     })
 }
 
-const readGroundDbSync = async (
+const readGroundDbSync = (
   path: string,
   query: string,
   tlmName: string
-): Promise<queryReturnType<GroundObjectArrayIncludingDateTimeType>> =>
+): Promise<queryReturnType<ObjectArrayIncludingDateTimeType['ground']>['ground']> =>
   new Promise((resolve) => {
     const db = new sqlite3.Database(path)
     db.serialize(() => {
@@ -329,7 +340,7 @@ const readGroundDbSync = async (
           return
         }
 
-        const schemaResult = groundArrayObjectSchema.safeParse(records)
+        const schemaResult = groundArrayObjectTypeSchema.safeParse(records)
         if (!schemaResult.success) {
           resolve({
             success: false,
@@ -358,10 +369,10 @@ const readGroundDbSync = async (
     })
   })
 
-const getOrbitData = () => {
+const getOrbitData = () =>
   Promise.all(queryObjectOrbitList.map((element) => readOrbitDbSync(SETTING_PATH, element.query, element.tlmId))).then(
     (responses) => {
-      const responseData: responseDataType<true> = { tlm: {}, errorMessages: [] }
+      const responseData: responseDataType['orbit'] = { tlm: {}, errorMessages: [] }
       responses.forEach((response) => {
         const tlmIdIndex = request.tlm.findIndex((e) => e.tlmId === response.tlmId)
         const tlmListEachTlmId = request.tlm[tlmIdIndex]?.tlmList
@@ -375,21 +386,18 @@ const getOrbitData = () => {
           responseData.errorMessages.push(error)
         }
       })
-
-      console.log(responseData)
-      console.timeEnd('test')
+      return responseData
     }
   )
-}
 
-const getGroundData = () => {
+const getGroundData = () =>
   Promise.all(
     queryObjectGroundList.map(async (queryObject) => {
       const dbPath = join(DB_TOP_PATH, request.project, `${queryObject.tlmName}.db`)
       return await readGroundDbSync(dbPath, queryObject.query, queryObject.tlmName)
     })
   ).then((responses) => {
-    const responseData: responseDataType<false> = { tlm: {}, errorMessages: [] }
+    const responseData: responseDataType['ground'] = { tlm: {}, errorMessages: [] }
     responses.forEach((response) => {
       if (response.success) {
         const tlmName = response.tlmName
@@ -400,14 +408,20 @@ const getGroundData = () => {
         responseData.errorMessages.push(error)
       }
     })
-    console.log(responseData.tlm['PCDU_BAT_CURRENT'])
-    console.timeEnd('test')
+    return responseData
   })
-}
 
-const getData = (isOrbit: boolean) => {
-  if (isOrbit) return getOrbitData()
-  return getGroundData()
+const getData = async (isOrbit: boolean) => {
+  if (isOrbit) {
+    const response = await getOrbitData()
+    console.log(response)
+    console.timeEnd('test')
+    return response
+  }
+  const response = await getGroundData()
+  console.log(response)
+  console.timeEnd('test')
+  return response
 }
 
 console.time('test')
