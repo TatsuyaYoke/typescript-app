@@ -66,7 +66,7 @@ const queryObjectGroundList = tlmList.map((tlm) => {
   `),
   }
 })
-console.log(queryObjectGroundList)
+
 export type querySuccess<T> = { success: true; tlmId?: number; tlmName?: string; data: T }
 export type queryError = { success: false; tlmId?: number; tlmName?: string; error: string }
 export type queryReturnType<T> = querySuccess<T> | queryError
