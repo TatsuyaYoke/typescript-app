@@ -2,11 +2,13 @@ import * as z from 'zod'
 import { BigQuery } from '@google-cloud/bigquery'
 import { join } from 'path'
 import sqlite3 from 'sqlite3'
+import * as dotenv from 'dotenv'
+dotenv.config()
 
-const DB_TOP_PATH = process.env.DB_TOP_PATH
+const DB_TOP_PATH = process.env.DB_TOP_PATH ?? ''
 const BIGQUERY_PROJECT = process.env.BIGQUERY_PROJECT
 const OBCTIME_INITIAL = process.env.OBCTIME_INITIAL
-const SETTING_PATH = process.env.SETTING_PATH
+const SETTING_PATH = process.env.SETTING_PATH ?? ''
 
 export type selectOptionType = {
   label: string
@@ -48,6 +50,9 @@ const queryTrim = (query: string) =>
     .replace(/\(tab\)/g, '  ')
     .replace(/,$/, '')
 
+const mode = ['orbit', 'ground'] as const
+export type mode = typeof mode[number]
+
 export type querySuccess<T> = {
   orbit: { success: true; tlmId: number; data: T }
   ground: { success: true; tlmName: string; data: T }
@@ -56,10 +61,7 @@ export type queryError = {
   orbit: { success: false; tlmId: number; error: string }
   ground: { success: false; tlmName: string; error: string }
 }
-export type queryReturnType<T> = {
-  orbit: querySuccess<T>['orbit'] | queryError['orbit']
-  ground: querySuccess<T>['ground'] | queryError['ground']
-}
+export type queryReturnType<T, U extends mode> = querySuccess<T>[U] | queryError[U]
 
 const regexGroundTestDateTime =
   /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]/
@@ -113,25 +115,14 @@ export type ObjectArrayIncludingDateTimeType = {
   ground: z.infer<typeof groundObjectArrayIncludingDateTimeTypeSchema>
 }
 
-export type responseDataType = {
-  orbit: {
-    tlm: {
-      [key: string]: {
-        time: DateTimeType['orbit'][]
-        data: DataType['orbit'][]
-      }
+export type responseDataType<T extends mode> = {
+  tlm: {
+    [key: string]: {
+      time: DateTimeType[T][]
+      data: DataType[T][]
     }
-    warningMessages: string[]
   }
-  ground: {
-    tlm: {
-      [key: string]: {
-        time: DateTimeType['ground'][]
-        data: DataType['ground'][]
-      }
-    }
-    warningMessages: string[]
-  }
+  warningMessages: string[]
 }
 
 const includeObcTime = (value: unknown): value is ObjectArrayIncludingDateTimeType['orbit'] => {
@@ -186,7 +177,7 @@ const readOrbitDbSync = (
   path: string,
   query: string,
   tlmId: number
-): Promise<queryReturnType<ObjectArrayIncludingDateTimeType['orbit']>['orbit']> => {
+): Promise<queryReturnType<ObjectArrayIncludingDateTimeType['orbit'], 'orbit'>> => {
   const bigquery = new BigQuery({
     keyFilename: path,
   })
@@ -230,7 +221,7 @@ const readGroundDbSync = (
   path: string,
   query: string,
   tlmName: string
-): Promise<queryReturnType<ObjectArrayIncludingDateTimeType['ground']>['ground']> =>
+): Promise<queryReturnType<ObjectArrayIncludingDateTimeType['ground'], 'ground'>> =>
   new Promise((resolve) => {
     const db = new sqlite3.Database(path)
     db.serialize(() => {
@@ -307,7 +298,7 @@ const getOrbitData = (request: requestDataType) => {
   return Promise.all(
     queryObjectList.map((element) => readOrbitDbSync(SETTING_PATH, element.query, element.tlmId))
   ).then((responses) => {
-    const responseData: responseDataType['orbit'] = { tlm: {}, warningMessages: [] }
+    const responseData: responseDataType<'orbit'> = { tlm: {}, warningMessages: [] }
     responses.forEach((response) => {
       const tlmIdIndex = request.tlm.findIndex((e) => e.tlmId === response.tlmId)
       const tlmListEachTlmId = request.tlm[tlmIdIndex]?.tlmList
@@ -356,7 +347,7 @@ const getGroundData = (request: requestDataType) => {
       return await readGroundDbSync(dbPath, queryObject.query, queryObject.tlmName)
     })
   ).then((responses) => {
-    const responseData: responseDataType['ground'] = { tlm: {}, warningMessages: [] }
+    const responseData: responseDataType<'ground'> = { tlm: {}, warningMessages: [] }
     responses.forEach((response) => {
       if (response.success) {
         const tlmName = response.tlmName
@@ -420,4 +411,4 @@ const getData = async (isOrbit: boolean) => {
 }
 
 console.time('test')
-getData(true)
+getData(false)
