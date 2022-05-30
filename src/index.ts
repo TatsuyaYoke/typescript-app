@@ -362,53 +362,40 @@ const getGroundData = (request: requestDataType) => {
   })
 }
 
-const getData = async (isOrbit: boolean) => {
+const getData = async (request: requestDataType) => {
   if (isOrbit) {
-    const request = {
-      project: 'DSX0201',
-      isOrbit: isOrbit,
-      bigqueryTable: 'strix_b_telemetry_v_6_17',
-      isStored: true,
-      isChosen: false,
-      dateSetting: {
-        startDate: new Date(2022, 3, 28),
-        endDate: new Date(2022, 3, 28),
-      },
-      tesCase: [{ value: '510_FlatSat', label: '510_FlatSat' }],
-      tlm: [
-        { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
-        { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
-      ],
-    }
     const response = await getOrbitData(request)
     console.log(response)
     console.timeEnd('test')
     return response
+  } else {
+    const response = await getGroundData(request)
+    console.log(response)
+    console.timeEnd('test')
+    return response
   }
-  const request = {
-    project: 'DSX0201',
-    isOrbit: isOrbit,
-    bigqueryTable: 'strix_b_telemetry_v_6_17',
-    isStored: false,
-    isChosen: true,
-    dateSetting: {
-      startDate: new Date(2022, 4, 18),
-      endDate: new Date(2022, 4, 19),
-    },
-    tesCase: [
-      { value: '510_FlatSat', label: '510_FlatSat' },
-      { value: '511_Hankan_Test', label: '511_Hankan_Test' },
-    ],
-    tlm: [
-      { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
-      { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
-    ],
-  }
-  const response = await getGroundData(request)
-  console.log(response)
-  console.timeEnd('test')
-  return response
+}
+
+const isOrbit = true
+const request = {
+  project: 'DSX0201',
+  isOrbit: isOrbit,
+  bigqueryTable: 'strix_b_telemetry_v_6_17',
+  isStored: false,
+  isChosen: true,
+  dateSetting: {
+    startDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 4, 18),
+    endDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 4, 19),
+  },
+  tesCase: [
+    { value: '510_FlatSat', label: '510_FlatSat' },
+    { value: '511_Hankan_Test', label: '511_Hankan_Test' },
+  ],
+  tlm: [
+    { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
+    { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
+  ],
 }
 
 console.time('test')
-getData(false)
+getData(request)
