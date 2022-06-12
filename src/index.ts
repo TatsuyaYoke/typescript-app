@@ -3,12 +3,15 @@ import { BigQuery } from '@google-cloud/bigquery'
 import { join } from 'path'
 import sqlite3 from 'sqlite3'
 import * as dotenv from 'dotenv'
+import { nonNullable } from './types'
 dotenv.config()
 
 const DB_TOP_PATH = process.env.DB_TOP_PATH ?? ''
 const BIGQUERY_PROJECT = process.env.BIGQUERY_PROJECT
 const OBCTIME_INITIAL = process.env.OBCTIME_INITIAL
-const SETTING_PATH = process.env.SETTING_PATH ?? ''
+export const SETTING_PATH = process.env.SETTING_PATH ?? ''
+
+export const isNotNumber = <T>(item: T): item is Exclude<T, number> => typeof item !== 'number'
 
 export type selectOptionType = {
   label: string
@@ -29,7 +32,7 @@ export type requestDataType = {
   isChosen: boolean
   bigqueryTable: string
   dateSetting: dateSettingType
-  tesCase: selectOptionType[]
+  testCase: selectOptionType[]
   tlm: requestTlmType[]
 }
 
@@ -40,7 +43,7 @@ const getStringFromUTCDateFixedTime = (date: Date, time: string) => {
   return `${year}-${month}-${day} ${time}`
 }
 
-const queryTrim = (query: string) =>
+const trimQuery = (query: string) =>
   query
     .split('\n')
     .map((s) => s.trim())
@@ -54,11 +57,11 @@ const mode = ['orbit', 'ground'] as const
 export type mode = typeof mode[number]
 
 export type querySuccess<T> = {
-  orbit: { success: true; tlmId: number; data: T }
+  orbit: { success: true; data: T }
   ground: { success: true; tlmName: string; data: T }
 }
 export type queryError = {
-  orbit: { success: false; tlmId: number; error: string }
+  orbit: { success: false; error: string }
   ground: { success: false; tlmName: string; error: string }
 }
 export type queryReturnType<T, U extends mode> = querySuccess<T>[U] | queryError[U]
@@ -125,28 +128,36 @@ export type responseDataType<T extends mode> = {
   warningMessages: string[]
 }
 
-const includeObcTime = (value: unknown): value is ObjectArrayIncludingDateTimeType['orbit'] => {
-  if ((value as ObjectArrayIncludingDateTimeType['orbit']).OBCTimeUTC !== undefined) return true
-  return false
-}
-
-export const toObjectArrayOrbit = (
-  records: ArrayObjectType['orbit']
-): ObjectArrayIncludingDateTimeType['orbit'] | null => {
-  const objectArray: ObjectArrayType['orbit'] = {}
+export const toObjectArrayOrbit = (records: ArrayObjectType['orbit']): ObjectArrayIncludingDateTimeType['orbit'] => {
+  const objectArray: ObjectArrayIncludingDateTimeType['orbit'] = { OBCTimeUTC: [], CalibratedOBCTimeUTC: [] }
   const keys = Object.keys(records[0] ?? {})
+  const keysOBCTimeUTC = keys.filter((e) => e.indexOf('_OBCTimeUTC') !== -1)
+  const keysCalibratedOBCTimeUTC = keys.filter((e) => e.indexOf('_CalibratedOBCTimeUTC') !== -1)
+
   keys.forEach((key) => {
     objectArray[key] = []
   })
+
   records.forEach((record) => {
-    keys.forEach((key) => {
-      objectArray[key]?.push(record[key] ?? null)
-    })
+    const OBCTimeUTC = keysOBCTimeUTC
+      .map((e) => record[e])
+      .filter(isNotNumber)
+      .filter(nonNullable)[0]
+
+    const CalibratedOBCTimeUTC = keysCalibratedOBCTimeUTC
+      .map((e) => record[e])
+      .filter(isNotNumber)
+      .filter(nonNullable)[0]
+
+    if (OBCTimeUTC && CalibratedOBCTimeUTC) {
+      objectArray.OBCTimeUTC.push(OBCTimeUTC)
+      objectArray.CalibratedOBCTimeUTC.push(CalibratedOBCTimeUTC)
+      keys.forEach((key) => {
+        if (key.indexOf('OBCTimeUTC') === -1) objectArray[key]?.push(record[key] ?? null)
+      })
+    }
   })
-  if (includeObcTime(objectArray)) {
-    return objectArray
-  }
-  return null
+  return objectArray
 }
 
 const includeDate = (value: unknown): value is ObjectArrayIncludingDateTimeType['ground'] => {
@@ -173,10 +184,9 @@ export const toObjectArrayGround = (
   return null
 }
 
-const readOrbitDbSync = (
+export const readOrbitDbSync = (
   path: string,
-  query: string,
-  tlmId: number
+  query: string
 ): Promise<queryReturnType<ObjectArrayIncludingDateTimeType['orbit'], 'orbit'>> => {
   const bigquery = new BigQuery({
     keyFilename: path,
@@ -191,28 +201,24 @@ const readOrbitDbSync = (
         if (convertedData)
           return {
             success: true,
-            tlmId: tlmId,
             data: convertedData,
           } as const
 
         return {
           success: false,
-          tlmId: tlmId,
-          error: `tlmId${tlmId}: Cannot convert from arrayObject to objectArray`,
+          error: `Cannot convert from arrayObject to objectArray`,
         } as const
       }
 
       return {
         success: false,
-        tlmId: tlmId,
-        error: `tlmId${tlmId}: ${JSON.stringify(schemaResult.error.issues[0])}`,
+        error: `${JSON.stringify(schemaResult.error.issues[0])}`,
       } as const
     })
     .catch((err) => {
       return {
         success: false,
-        tlmId: tlmId,
-        error: `tlmId${tlmId}: ${JSON.stringify(err.errors[0])}`,
+        error: `${JSON.stringify(err.errors[0])}`,
       } as const
     })
 }
@@ -267,51 +273,67 @@ const readGroundDbSync = (
 const getOrbitData = (request: requestDataType) => {
   const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
   const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
-  const queryObjectList = request.tlm.map((currentElement) => {
-    const datasetTableQuery = `\n(tab)\`${BIGQUERY_PROJECT}.${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
-    const tlmListQuery = currentElement.tlmList.reduce(
-      (prev, current) => `${prev}\n(tab)${current},`,
-      `
-    (tab)OBCTimeUTC,
-    (tab)CalibratedOBCTimeUTC,
+  const queryWith = trimQuery(
+    request.tlm.reduce((prevQuery, currentElement) => {
+      const datasetTableQuery = `\n(tab)(tab)\`${BIGQUERY_PROJECT}.${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
+      const tlmListQuery = currentElement.tlmList.reduce(
+        (prev, current) => `${prev}\n(tab)(tab)${current},`,
+        `
+    (tab)(tab)OBCTimeUTC,
+    (tab)(tab)CalibratedOBCTimeUTC,
     `
-    )
-    const whereQuery = `
-      (tab)CalibratedOBCTimeUTC > \'${OBCTIME_INITIAL}\'
-      (tab)AND OBCTimeUTC BETWEEN \'${startDateStr}\' AND \'${endDateStr}\'
-      ${request.isStored ? '(tab)AND Stored = True' : '(tab)AND Stored = False'}
+      )
+      const whereQuery = `
+      (tab)(tab)CalibratedOBCTimeUTC > \'${OBCTIME_INITIAL}\'
+      (tab)(tab)AND OBCTimeUTC BETWEEN \'${startDateStr}\' AND \'${endDateStr}\'
+      ${request.isStored ? '(tab)(tab)AND Stored = True' : '(tab)(tab)AND Stored = False'}
       `
 
-    const query = queryTrim(`
-    SELECT DISTINCT${tlmListQuery}
-    FROM${datasetTableQuery}
-    WHERE${whereQuery}
-    ORDER BY OBCTimeUTC
-  `)
+      return `${prevQuery}
+    (tab)id${currentElement.tlmId} as (
+    (tab)SELECT DISTINCT${tlmListQuery}
+    (tab)FROM${datasetTableQuery}
+    (tab)WHERE${whereQuery}
+    (tab)ORDER BY OBCTimeUTC),
+  `
+    }, 'WITH\n')
+  )
 
-    return {
-      tlmId: currentElement.tlmId,
-      query: query,
-    }
-  })
+  const querySelect = trimQuery(
+    request.tlm.reduce((prevQuery, currentElement) => {
+      const tlmListQuery = currentElement.tlmList.reduce((prev, current) => `${prev}\n(tab)${current},`, '')
+      return `${prevQuery}
+    (tab)id${currentElement.tlmId}.OBCTimeUTC AS id${currentElement.tlmId}_OBCTimeUTC,
+    (tab)id${currentElement.tlmId}.CalibratedOBCTimeUTC AS id${currentElement.tlmId}_CalibratedOBCTimeUTC,
+    ${tlmListQuery}
+   `
+    }, 'SELECT\n')
+  )
 
-  return Promise.all(
-    queryObjectList.map((element) => readOrbitDbSync(SETTING_PATH, element.query, element.tlmId))
-  ).then((responses) => {
+  const baseId = request.tlm[0]?.tlmId
+  const queryJoin = trimQuery(
+    request.tlm.slice(1, request.tlm.length).reduce((prevQuery, currentElement) => {
+      return `${prevQuery}
+    FULL JOIN id${currentElement.tlmId}
+    (tab)ON id${baseId}.OBCTimeUTC = id${currentElement.tlmId}.OBCTimeUTC
+    `
+    }, `FROM id${baseId}`)
+  )
+
+  const query = `${queryWith}\n${querySelect}\n${queryJoin}`
+  return readOrbitDbSync(SETTING_PATH, query).then((response) => {
     const responseData: responseDataType<'orbit'> = { tlm: {}, warningMessages: [] }
-    responses.forEach((response) => {
-      const tlmIdIndex = request.tlm.findIndex((e) => e.tlmId === response.tlmId)
-      const tlmListEachTlmId = request.tlm[tlmIdIndex]?.tlmList
-      if (response.success && tlmListEachTlmId) {
-        tlmListEachTlmId.forEach((tlm) => {
-          const data = response.data[tlm]
-          if (data) responseData.tlm[tlm] = { time: response.data.OBCTimeUTC, data: data }
-        })
-      } else if (!response.success && tlmListEachTlmId) {
-        const error = response.error
-        responseData.warningMessages.push(error)
-      }
-    })
+    if (response.success) {
+      console.log(response.data)
+      const tlmNameList = request.tlm.map((e) => e.tlmList).flat()
+      tlmNameList.forEach((tlmName) => {
+        const data = response.data[tlmName]
+        if (data) responseData.tlm[tlmName] = { time: response.data.OBCTimeUTC, data: data }
+      })
+    } else if (!response.success) {
+      const error = response.error
+      responseData.warningMessages.push(error)
+    }
     return responseData
   })
 }
@@ -321,7 +343,7 @@ const getGroundData = (request: requestDataType) => {
   const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
   const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
   const queryObjectList = tlmList.map((tlm) => {
-    const queryTestCase = request.tesCase
+    const queryTestCase = request.testCase
       .reduce((prev, current) => {
         return `${prev}test_case = \'${current.value}\' OR `
       }, '')
@@ -329,7 +351,7 @@ const getGroundData = (request: requestDataType) => {
 
     return {
       tlmName: tlm,
-      query: queryTrim(`
+      query: trimQuery(`
       SELECT DISTINCT
       (tab)DATE,
       (tab)${tlm}
@@ -387,7 +409,7 @@ const request = {
     startDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 4, 18),
     endDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 4, 19),
   },
-  tesCase: [
+  testCase: [
     { value: '510_FlatSat', label: '510_FlatSat' },
     { value: '511_Hankan_Test', label: '511_Hankan_Test' },
   ],
