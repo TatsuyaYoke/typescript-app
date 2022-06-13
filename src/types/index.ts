@@ -89,12 +89,12 @@ export type ObjectArrayIncludingDateTimeType = {
   ground: z.infer<typeof groundObjectArrayIncludingDateTimeTypeSchema>
 }
 
-export type ResponseDataType<T extends Mode> = {
+export type ResponseDataType = {
   success: boolean
   tlm: {
-    time: DateTimeType[T][]
+    time: string[]
     data: {
-      [key: string]: DataType[T][]
+      [key: string]: (number | null)[]
     }
   }
   errorMessages: string[]

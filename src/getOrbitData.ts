@@ -151,14 +151,20 @@ export const getOrbitData = async (request: RequestDataType, bigquerySettingPath
   const responseFromDb = await readOrbitDbSync(bigquerySettingPath, query)
   const errorMessages: string[] = []
 
-  const responseData: ResponseDataType<'orbit'> = { success: true, tlm: { time: [], data: {} }, errorMessages: [] }
+  const responseData: ResponseDataType = { success: true, tlm: { time: [], data: {} }, errorMessages: [] }
   if (responseFromDb.success) {
     responseData.tlm.time = responseFromDb.data.OBCTimeUTC
     const tlmAllList = request.tlm.map((e) => e.tlmList).flat()
     tlmAllList.forEach((tlmName) => {
       const data = responseFromDb.data[tlmName]
       responseData.tlm.data[tlmName] = []
-      if (data) responseData.tlm.data[tlmName]?.push(...data)
+      if (data) {
+        const dataNotIncludingString = data.map((d) => {
+          if (typeof d === 'string') return null
+          return d
+        })
+        responseData.tlm.data[tlmName]?.push(...dataNotIncludingString)
+      }
     })
   } else if (!responseFromDb.success) {
     const error = responseFromDb.error

@@ -14,7 +14,6 @@ import {
 } from './types'
 import { getStringFromUTCDateFixedTime, trimQuery, uniqueArray } from './function'
 
-
 export const readGroundTablesSync = (
   path: string
 ): Promise<{ success: true; data: { path: string; tableList: string[] } } | { success: false; error: string }> =>
@@ -200,9 +199,7 @@ export const getGroundData = async (request: RequestDataType, dbPath: string) =>
       const dayString = getStringFromUTCDateFixedTime(day)
       if (dbAllPathList.some((filePath) => filePath.indexOf(dayString) !== -1)) dayList.push(dayString)
     }
-    dbPathList = dayList
-      .map((day) => glob.sync(join(dbPath, `../${groundTestPath}/**/${day}/*${globStored}`)))
-      .flat()
+    dbPathList = dayList.map((day) => glob.sync(join(dbPath, `../${groundTestPath}/**/${day}/*${globStored}`))).flat()
   }
 
   const tableCheckResults = await Promise.all(dbPathList.map(async (dbPath) => await readGroundTablesSync(dbPath)))
@@ -316,7 +313,7 @@ export const getGroundData = async (request: RequestDataType, dbPath: string) =>
   })
 
   const responsesFromDb = await Promise.all(queryObjectList.map(async (object) => await readGroundDbSync(object)))
-  const responseData: ResponseDataType<'ground'> = {
+  const responseData: ResponseDataType = {
     success: true,
     tlm: { time: [], data: {} },
     errorMessages: [],
@@ -331,7 +328,13 @@ export const getGroundData = async (request: RequestDataType, dbPath: string) =>
       responseData.tlm.time.push(...responseFromDb.data.DATE)
       tlmAllList.forEach((tlmName) => {
         const data = responseFromDb.data[tlmName]
-        if (data) responseData.tlm.data[tlmName]?.push(...data)
+        if (data) {
+          const dataNotIncludingString = data.map((d) => {
+            if (typeof(d) === 'string') return null
+            return d
+          })
+          responseData.tlm.data[tlmName]?.push(...dataNotIncludingString)
+        }
       })
     } else {
       errorMessages.push(responseFromDb.error)
