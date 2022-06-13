@@ -181,7 +181,7 @@ export const readGroundDbSync = (queryObject: {
   })
 }
 
-export const getGroundData = async (request: RequestDataType, dbPath: string) => {
+export const getGroundData = async (request: RequestDataType, dbTopPath: string) => {
   const { groundTestPath, isStored, isChosen, dateSetting, testCase, tlm } = request
   const tlmAllList = tlm.map((e) => e.tlmList).flat()
   let dbPathList: string[] = []
@@ -189,20 +189,20 @@ export const getGroundData = async (request: RequestDataType, dbPath: string) =>
 
   if (isChosen) {
     dbPathList = testCase
-      .map((element) => glob.sync(join(dbPath, `../${groundTestPath}/${element.value}/**/*${globStored}`)))
+      .map((element) => glob.sync(join(dbTopPath, `../${groundTestPath}/${element.value}/**/*${globStored}`)))
       .flat()
   } else {
     let dayList: string[] = []
     const { startDate, endDate } = dateSetting
-    const dbAllPathList = glob.sync(join(dbPath, `../${groundTestPath}/**/**/*.db`))
+    const dbAllPathList = glob.sync(join(dbTopPath, `../${groundTestPath}/**/**/*.db`))
     for (let day = new Date(startDate.toDateString()); day <= endDate; day.setDate(day.getDate() + 1)) {
       const dayString = getStringFromUTCDateFixedTime(day)
       if (dbAllPathList.some((filePath) => filePath.indexOf(dayString) !== -1)) dayList.push(dayString)
     }
-    dbPathList = dayList.map((day) => glob.sync(join(dbPath, `../${groundTestPath}/**/${day}/*${globStored}`))).flat()
+    dbPathList = dayList.map((day) => glob.sync(join(dbTopPath, `../${groundTestPath}/**/${day}/*${globStored}`))).flat()
   }
 
-  const tableCheckResults = await Promise.all(dbPathList.map(async (dbPath) => await readGroundTablesSync(dbPath)))
+  const tableCheckResults = await Promise.all(dbPathList.map((dbPath) => readGroundTablesSync(dbPath)))
   const columnCheckResults = await Promise.all(
     tableCheckResults.map(async (result) => {
       if (result.success) {
@@ -312,7 +312,7 @@ export const getGroundData = async (request: RequestDataType, dbPath: string) =>
     }
   })
 
-  const responsesFromDb = await Promise.all(queryObjectList.map(async (object) => await readGroundDbSync(object)))
+  const responsesFromDb = await Promise.all(queryObjectList.map((object) => readGroundDbSync(object)))
   const responseData: ResponseDataType = {
     success: true,
     tlm: { time: [], data: {} },
