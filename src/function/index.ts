@@ -1,5 +1,5 @@
-export const uniqueArray = <T extends unknown[]>(array: T) => {
-  return [...new Set(array)] as T
+export const uniqueArray = <T>(array: T[]) => {
+  return [...new Set(array)]
 }
 
 export const getStringFromUTCDateFixedTime = (date: Date, time?: string) => {

@@ -11,8 +11,9 @@ import {
   ArrayObjectType,
   ObjectArrayIncludingDateTimeType,
   orbitArrayObjectTypeSchema,
+  ResponseDataType,
 } from './types'
-import { getStringFromUTCDateFixedTime, trimQuery } from './function'
+import { getStringFromUTCDateFixedTime, trimQuery, uniqueArray } from './function'
 dotenv.config()
 
 const BIGQUERY_PROJECT = process.env.BIGQUERY_PROJECT
@@ -152,19 +153,23 @@ const getOrbitData = async (request: RequestDataType) => {
 
   const query = `${queryWith}\n${querySelect}\n${queryJoin}`
   const responseFromDb = await readOrbitDbSync(SETTING_PATH, query)
+  const errorMessages: string[] = []
 
-  const responseData: responseDataType<'orbit'> = { tlm: {}, errorMessages: [] }
+  const responseData: ResponseDataType<'orbit'> = { success: true, tlm: { time: [], data: {} }, errorMessages: [] }
   if (responseFromDb.success) {
-    console.log(responseFromDb.data)
-    const tlmNameList = request.tlm.map((e) => e.tlmList).flat()
-    tlmNameList.forEach((tlmName) => {
+    responseData.tlm.time = responseFromDb.data.OBCTimeUTC
+    const tlmAllList = request.tlm.map((e) => e.tlmList).flat()
+    tlmAllList.forEach((tlmName) => {
       const data = responseFromDb.data[tlmName]
-      if (data) responseData.tlm[tlmName] = { time: responseFromDb.data.OBCTimeUTC, data: data }
+      responseData.tlm.data[tlmName] = []
+      if (data) responseData.tlm.data[tlmName]?.push(...data)
     })
   } else if (!responseFromDb.success) {
     const error = responseFromDb.error
-    responseData.errorMessages.push(error)
+    errorMessages.push(error)
   }
+  if (responseData.tlm.time.length === 0) responseData.success = false
+  responseData.errorMessages = uniqueArray(errorMessages)
   return responseData
 }
 
