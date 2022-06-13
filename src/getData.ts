@@ -7,9 +7,9 @@ dotenv.config()
 const DB_PATH = process.env.DB_PATH ?? ''
 const BIGQUERY_SETTING_PATH = process.env.BIGQUERY_SETTING_PATH ?? ''
 
-const isOrbit = true
+const isOrbit = false
 const request = {
-  project: 'DSX0201',
+  pjName: 'DSX0201',
   isOrbit: isOrbit,
   orbitDatasetPath: 'strix_b_telemetry_v_6_17',
   groundTestPath: 'DSX0201/500_SystemFM',

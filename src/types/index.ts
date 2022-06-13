@@ -18,7 +18,7 @@ export type RequestTlmType = {
   tlmList: string[]
 }
 export type RequestDataType = {
-  project: string
+  pjName: string
   isOrbit: boolean
   isStored: boolean
   isChosen: boolean
