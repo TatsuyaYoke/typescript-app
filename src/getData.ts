@@ -11,7 +11,7 @@ const isOrbit = true
 const request = {
   project: 'DSX0201',
   isOrbit: isOrbit,
-  bigqueryTable: 'strix_b_telemetry_v_6_17',
+  orbitDatasetPath: 'strix_b_telemetry_v_6_17',
   groundTestPath: 'DSX0201/500_SystemFM',
   isStored: false,
   isChosen: false,

@@ -102,7 +102,7 @@ export const getOrbitData = async (request: RequestDataType, bigquerySettingPath
   const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
   const queryWith = trimQuery(
     request.tlm.reduce((prevQuery, currentElement) => {
-      const datasetTableQuery = `\n(tab)(tab)\`${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
+      const datasetTableQuery = `\n(tab)(tab)\`${request.orbitDatasetPath}.tlm_id_${currentElement.tlmId}\``
       const tlmListQuery = currentElement.tlmList.reduce(
         (prev, current) => `${prev}\n(tab)(tab)${current},`,
         `

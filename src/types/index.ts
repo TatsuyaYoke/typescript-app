@@ -22,7 +22,7 @@ export type RequestDataType = {
   isOrbit: boolean
   isStored: boolean
   isChosen: boolean
-  bigqueryTable: string
+  orbitDatasetPath: string
   groundTestPath: string
   dateSetting: DateSettingType
   testCase: SelectOptionType[]
