@@ -8,7 +8,7 @@
     "build": "tsc",
     "dev2": "ts-node-dev --respawn src/index2.ts",
     "dev3": "ts-node-dev --respawn src/index3.ts",
-    "dev": "ts-node-dev --respawn src/getData.ts",
+    "dev": "ts-node-dev -T --respawn src/getData.ts",
     "type": "ts-node-dev --respawn src/type-challenges/pick.ts"
   },
   "keywords": [],
