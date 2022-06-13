@@ -23,6 +23,7 @@ export type RequestDataType = {
   isStored: boolean
   isChosen: boolean
   bigqueryTable: string
+  groundTestPath: string
   dateSetting: DateSettingType
   testCase: SelectOptionType[]
   tlm: RequestTlmType[]

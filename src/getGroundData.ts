@@ -1,5 +1,4 @@
 import { join } from 'path'
-import * as dotenv from 'dotenv'
 import * as glob from 'glob'
 import sqlite3 from 'sqlite3'
 import * as z from 'zod'
@@ -14,9 +13,7 @@ import {
   ResponseDataType,
 } from './types'
 import { getStringFromUTCDateFixedTime, trimQuery, uniqueArray } from './function'
-dotenv.config()
 
-export const DB_TOP_PATH = process.env.DB_TOP_PATH ?? ''
 
 export const readGroundTablesSync = (
   path: string
@@ -185,26 +182,26 @@ export const readGroundDbSync = (queryObject: {
   })
 }
 
-export const getGroundData = async (request: RequestDataType) => {
-  const { project, isStored, isChosen, dateSetting, testCase, tlm } = request
+export const getGroundData = async (request: RequestDataType, dbPath: string) => {
+  const { groundTestPath, isStored, isChosen, dateSetting, testCase, tlm } = request
   const tlmAllList = tlm.map((e) => e.tlmList).flat()
   let dbPathList: string[] = []
   const globStored = isStored ? '_All_Telemetry_stored.db' : '_All_Telemetry.db'
 
   if (isChosen) {
     dbPathList = testCase
-      .map((element) => glob.sync(join(DB_TOP_PATH, `../${project}/500_SystemFM/${element.value}/**/*${globStored}`)))
+      .map((element) => glob.sync(join(dbPath, `../${groundTestPath}/${element.value}/**/*${globStored}`)))
       .flat()
   } else {
     let dayList: string[] = []
     const { startDate, endDate } = dateSetting
-    const dbAllPathList = glob.sync(join(DB_TOP_PATH, `../${project}/500_SystemFM/**/**/*.db`))
+    const dbAllPathList = glob.sync(join(dbPath, `../${groundTestPath}/**/**/*.db`))
     for (let day = new Date(startDate.toDateString()); day <= endDate; day.setDate(day.getDate() + 1)) {
       const dayString = getStringFromUTCDateFixedTime(day)
       if (dbAllPathList.some((filePath) => filePath.indexOf(dayString) !== -1)) dayList.push(dayString)
     }
     dbPathList = dayList
-      .map((day) => glob.sync(join(DB_TOP_PATH, `../${project}/500_SystemFM/**/${day}/*${globStored}`)))
+      .map((day) => glob.sync(join(dbPath, `../${groundTestPath}/**/${day}/*${globStored}`)))
       .flat()
   }
 

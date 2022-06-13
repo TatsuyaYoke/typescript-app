@@ -1,5 +1,4 @@
 import { BigQuery } from '@google-cloud/bigquery'
-import * as dotenv from 'dotenv'
 import {
   isNotNumber,
   nonNullable,
@@ -14,11 +13,8 @@ import {
   ResponseDataType,
 } from './types'
 import { getStringFromUTCDateFixedTime, trimQuery, uniqueArray } from './function'
-dotenv.config()
 
-const BIGQUERY_PROJECT = process.env.BIGQUERY_PROJECT
-const OBCTIME_INITIAL = process.env.OBCTIME_INITIAL
-const SETTING_PATH = process.env.SETTING_PATH ?? ''
+const OBCTIME_INITIAL = '2016-1-1 00:00:00 UTC'
 
 export type responseDataType<T extends Mode> = {
   tlm: {
@@ -101,12 +97,12 @@ export const readOrbitDbSync = (
     })
 }
 
-export const getOrbitData = async (request: RequestDataType) => {
+export const getOrbitData = async (request: RequestDataType, bigquerySettingPath: string) => {
   const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
   const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
   const queryWith = trimQuery(
     request.tlm.reduce((prevQuery, currentElement) => {
-      const datasetTableQuery = `\n(tab)(tab)\`${BIGQUERY_PROJECT}.${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
+      const datasetTableQuery = `\n(tab)(tab)\`${request.bigqueryTable}.tlm_id_${currentElement.tlmId}\``
       const tlmListQuery = currentElement.tlmList.reduce(
         (prev, current) => `${prev}\n(tab)(tab)${current},`,
         `
@@ -152,7 +148,7 @@ export const getOrbitData = async (request: RequestDataType) => {
   )
 
   const query = `${queryWith}\n${querySelect}\n${queryJoin}`
-  const responseFromDb = await readOrbitDbSync(SETTING_PATH, query)
+  const responseFromDb = await readOrbitDbSync(bigquerySettingPath, query)
   const errorMessages: string[] = []
 
   const responseData: ResponseDataType<'orbit'> = { success: true, tlm: { time: [], data: {} }, errorMessages: [] }

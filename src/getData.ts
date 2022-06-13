@@ -1,12 +1,18 @@
 import { getGroundData } from './getGroundData'
 import { getOrbitData } from './getOrbitData'
 import type { RequestDataType } from './types'
+import * as dotenv from 'dotenv'
+dotenv.config()
+
+const DB_PATH = process.env.DB_PATH ?? ''
+const BIGQUERY_SETTING_PATH = process.env.BIGQUERY_SETTING_PATH ?? ''
 
 const isOrbit = true
 const request = {
   project: 'DSX0201',
   isOrbit: isOrbit,
   bigqueryTable: 'strix_b_telemetry_v_6_17',
+  groundTestPath: 'DSX0201/500_SystemFM',
   isStored: false,
   isChosen: false,
   dateSetting: {
@@ -27,9 +33,9 @@ const request = {
 
 const getData = (request: RequestDataType) => {
   if (request.isOrbit) {
-    return getOrbitData(request)
+    return getOrbitData(request, BIGQUERY_SETTING_PATH)
   } else {
-    return getGroundData(request)
+    return getGroundData(request, DB_PATH)
   }
 }
 
