@@ -111,8 +111,8 @@ export const getOrbitData = async (request: RequestDataType, bigquerySettingPath
         `
       )
       const whereQuery = `
-      (tab)(tab)CalibratedOBCTimeUTC > \'${OBCTIME_INITIAL}\'
-      (tab)(tab)AND OBCTimeUTC BETWEEN \'${startDateStr}\' AND \'${endDateStr}\'
+      (tab)(tab)CalibratedOBCTimeUTC > '${OBCTIME_INITIAL}'
+      (tab)(tab)AND OBCTimeUTC BETWEEN '${startDateStr}' AND '${endDateStr}'
       ${request.isStored ? '(tab)(tab)AND Stored = True' : '(tab)(tab)AND Stored = False'}
       `
 
