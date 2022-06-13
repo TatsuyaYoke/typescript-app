@@ -4,9 +4,6 @@ import {
   nonNullable,
   RequestDataType,
   QueryReturnType,
-  Mode,
-  DateTimeType,
-  DataType,
   ArrayObjectType,
   ObjectArrayIncludingDateTimeType,
   orbitArrayObjectTypeSchema,
@@ -15,16 +12,6 @@ import {
 import { getStringFromUTCDateFixedTime, trimQuery, uniqueArray } from './function'
 
 const OBCTIME_INITIAL = '2016-1-1 00:00:00 UTC'
-
-export type responseDataType<T extends Mode> = {
-  tlm: {
-    [key: string]: {
-      time: DateTimeType[T][]
-      data: DataType[T][]
-    }
-  }
-  errorMessages: string[]
-}
 
 export const toObjectArrayOrbit = (records: ArrayObjectType['orbit']): ObjectArrayIncludingDateTimeType['orbit'] => {
   const objectArray: ObjectArrayIncludingDateTimeType['orbit'] = { OBCTimeUTC: [], CalibratedOBCTimeUTC: [] }
