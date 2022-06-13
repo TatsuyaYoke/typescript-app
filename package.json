@@ -10,7 +10,8 @@
     "dev2": "ts-node-dev --respawn src/index2.ts",
     "dev3": "ts-node-dev --respawn src/index3.ts",
     "dev-ground": "ts-node-dev --respawn src/getGroundData.ts",
-    "dev-orbit": "ts-node-dev --respawn src/getOrbitData.ts"
+    "dev-orbit": "ts-node-dev --respawn src/getOrbitData.ts",
+    "type": "ts-node-dev --respawn src/type-challenges/pick.ts"
   },
   "keywords": [],
   "author": "",
