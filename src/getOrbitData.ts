@@ -101,7 +101,7 @@ export const readOrbitDbSync = (
     })
 }
 
-const getOrbitData = async (request: RequestDataType) => {
+export const getOrbitData = async (request: RequestDataType) => {
   const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
   const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
   const queryWith = trimQuery(
@@ -172,30 +172,3 @@ const getOrbitData = async (request: RequestDataType) => {
   responseData.errorMessages = uniqueArray(errorMessages)
   return responseData
 }
-
-const isOrbit = true
-const request = {
-  project: 'DSX0201',
-  isOrbit: isOrbit,
-  bigqueryTable: 'strix_b_telemetry_v_6_17',
-  isStored: false,
-  isChosen: true,
-  dateSetting: {
-    startDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 4, 18),
-    endDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 4, 19),
-  },
-  testCase: [
-    { value: '510_FlatSat', label: '510_FlatSat' },
-    { value: '511_Hankan_Test', label: '511_Hankan_Test' },
-  ],
-  tlm: [
-    { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
-    { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
-  ],
-}
-
-console.time('test')
-getOrbitData(request).then((response) => {
-  console.log(response)
-  console.timeEnd('test')
-})

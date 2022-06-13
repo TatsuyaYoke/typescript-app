@@ -185,7 +185,7 @@ export const readGroundDbSync = (queryObject: {
   })
 }
 
-const getGroundData = async (request: RequestDataType) => {
+export const getGroundData = async (request: RequestDataType) => {
   const { project, isStored, isChosen, dateSetting, testCase, tlm } = request
   const tlmAllList = tlm.map((e) => e.tlmList).flat()
   let dbPathList: string[] = []
@@ -344,31 +344,3 @@ const getGroundData = async (request: RequestDataType) => {
   responseData.errorMessages = uniqueArray(errorMessages)
   return responseData
 }
-
-const isOrbit = false
-const request = {
-  project: 'DSX0201',
-  isOrbit: isOrbit,
-  bigqueryTable: 'strix_b_telemetry_v_6_17',
-  isStored: false,
-  isChosen: false,
-  dateSetting: {
-    // startDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 4, 18),
-    // endDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 4, 19),
-    startDate: isOrbit ? new Date(2022, 3, 28) : new Date(2021, 10, 11),
-    endDate: isOrbit ? new Date(2022, 3, 28) : new Date(2021, 10, 17),
-  },
-  testCase: [
-    { value: '510_FlatSat', label: '510_FlatSat' },
-    { value: '511_Hankan_Test', label: '511_Hankan_Test' },
-  ],
-  tlm: [
-    { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE', 'AB_DSS2_ONOFF'] },
-    { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
-  ],
-}
-console.time('test')
-getGroundData(request).then((response) => {
-  console.log(response)
-  console.timeEnd('test')
-})
