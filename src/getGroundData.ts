@@ -289,7 +289,7 @@ export const getGroundData = async (request: RequestDataType, dbTopPath: string)
         return `${prevQuery}
         (tab)${table}_tlm.DATE AS ${table}_DATE,
         ${tlmListQuery}
-       `
+        `
       }, 'SELECT\n')
     )
 

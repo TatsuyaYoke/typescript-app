@@ -16,4 +16,5 @@ export const trimQuery = (query: string) =>
     .replace(/(^\n)|(\n$)/g, '')
     .replace(/^\n/gm, '')
     .replace(/\(tab\)/g, '  ')
+    .replace(/\n$/, '')
     .replace(/,$/, '')
