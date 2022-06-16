@@ -1,4 +1,4 @@
-;(function () {
+;(() => {
   const size = ['small', 'medium', 'large'] as const
   type Size = typeof size[number]
 
