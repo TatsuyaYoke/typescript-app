@@ -9,7 +9,7 @@ import {
   orbitArrayObjectTypeSchema,
   ResponseDataType,
 } from './types'
-import { getStringFromUTCDateFixedTime, trimQuery, uniqueArray } from './function'
+import { getStringFromDateFixedTime, trimQuery, uniqueArray } from './function'
 
 const OBCTIME_INITIAL = '2016-1-1 00:00:00 UTC'
 
@@ -85,8 +85,8 @@ export const readOrbitDbSync = (
 }
 
 export const getOrbitData = async (request: RequestDataType, bigquerySettingPath: string) => {
-  const startDateStr = getStringFromUTCDateFixedTime(request.dateSetting.startDate, '00:00:00')
-  const endDateStr = getStringFromUTCDateFixedTime(request.dateSetting.endDate, '23:59:59')
+  const startDateStr = getStringFromDateFixedTime(request.dateSetting.startDate, '00:00:00')
+  const endDateStr = getStringFromDateFixedTime(request.dateSetting.endDate, '23:59:59')
   const queryWith = trimQuery(
     request.tlm.reduce((prevQuery, currentElement) => {
       const datasetTableQuery = `\n(tab)(tab)\`${request.orbitDatasetPath}.tlm_id_${currentElement.tlmId}\``

@@ -20,19 +20,18 @@ const request = {
     // endDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 4, 19),
     // startDate: isOrbit ? new Date(2022, 3, 28) : new Date(2021, 10, 11),
     // endDate: isOrbit ? new Date(2022, 3, 28) : new Date(2021, 10, 17),
-    startDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 3, 18),
-    endDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 3, 21),
+    startDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 5, 10),
+    endDate: isOrbit ? new Date(2022, 3, 28) : new Date(2022, 5, 10),
   },
   testCase: [
     { value: '510_FlatSat', label: '510_FlatSat' },
     { value: '511_Hankan_Test', label: '511_Hankan_Test' },
   ],
   tlm: [
-    // { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE', 'AB_DSS2_ONOFF'] },
-    { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
+    { tlmId: 1, tlmList: ['PCDU_BAT_CURRENT', 'PCDU_BAT_VOLTAGE'] },
+    // { tlmId: 2, tlmList: ['OBC_AD590_01', 'OBC_AD590_02'] },
   ],
 }
-
 
 const getData = (request: RequestDataType): Promise<ResponseDataType> => {
   if (request.isOrbit) {

@@ -12,7 +12,7 @@ import {
   RequestDataType,
   ResponseDataType,
 } from './types'
-import { getStringFromUTCDateFixedTime, trimQuery, uniqueArray } from './function'
+import { getStringFromDateFixedTime, trimQuery, uniqueArray } from './function'
 
 export const readGroundTablesSync = (
   path: string
@@ -196,10 +196,12 @@ export const getGroundData = async (request: RequestDataType, dbTopPath: string)
     const { startDate, endDate } = dateSetting
     const dbAllPathList = glob.sync(join(dbTopPath, `../${groundTestPath}/**/**/*.db`))
     for (let day = new Date(startDate.toDateString()); day <= endDate; day.setDate(day.getDate() + 1)) {
-      const dayString = getStringFromUTCDateFixedTime(day)
+      const dayString = getStringFromDateFixedTime(day)
       if (dbAllPathList.some((filePath) => filePath.indexOf(dayString) !== -1)) dayList.push(dayString)
     }
-    dbPathList = dayList.map((day) => glob.sync(join(dbTopPath, `../${groundTestPath}/**/${day}/*${globStored}`))).flat()
+    dbPathList = dayList
+      .map((day) => glob.sync(join(dbTopPath, `../${groundTestPath}/**/${day}/*${globStored}`)))
+      .flat()
   }
 
   const tableCheckResults = await Promise.all(dbPathList.map((dbPath) => readGroundTablesSync(dbPath)))
@@ -330,7 +332,7 @@ export const getGroundData = async (request: RequestDataType, dbTopPath: string)
         const data = responseFromDb.data[tlmName]
         if (data) {
           const dataNotIncludingString = data.map((d) => {
-            if (typeof(d) === 'string') return null
+            if (typeof d === 'string') return null
             return d
           })
           responseData.tlm.data[tlmName]?.push(...dataNotIncludingString)
