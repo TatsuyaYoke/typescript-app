@@ -33,11 +33,34 @@ const request = {
   ],
 }
 
-const getData = (request: RequestDataType): Promise<ResponseDataType> => {
+const timeoutError = (timeoutMs: number) => {
+  return new Promise((resolve) => setTimeout(() => resolve('Timeout'), timeoutMs))
+}
+
+const isResponseDataType = (item: unknown): item is ResponseDataType => {
+  if (
+    (item as ResponseDataType).success !== undefined &&
+    ((item as ResponseDataType).tlm !== undefined && (item as ResponseDataType).errorMessages) !== undefined
+  )
+    return true
+  return false
+}
+
+const getData = async (request: RequestDataType, timeoutMs: number = 1000): Promise<ResponseDataType> => {
   if (request.isOrbit) {
-    return getOrbitData(request, BIGQUERY_SETTING_PATH)
+    const result = await Promise.race([getOrbitData(request, BIGQUERY_SETTING_PATH), timeoutError(timeoutMs)])
+    if (isResponseDataType(result)) return result
   } else {
-    return getGroundData(request, DB_PATH)
+    const result = await Promise.race([getGroundData(request, DB_PATH), timeoutError(timeoutMs)])
+    if (isResponseDataType(result)) return result
+  }
+  return {
+    success: false,
+    tlm: {
+      time: [],
+      data: {},
+    },
+    errorMessages: ['Timeout Error'],
   }
 }
 
